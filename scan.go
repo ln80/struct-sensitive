@@ -15,18 +15,46 @@ var (
 	ErrSubjectIDNotFound       = errors.New("subject ID is not found")
 )
 
+// Struct presents an accessor to sensitive struct fields and subject.
 type Struct interface {
+	// Replace accepts a replace function and calls it on each sensitive data field
 	Replace(fn ReplaceFunc) error
+	// SubjectID returns the resolved subjectID of the sensitive struct.
+	// It panics if the subjectID is not resolved.
 	SubjectID() string
+	// HasSensitive tells wether or not the struct has sensitive data fields.
 	HasSensitive() bool
+
+	private()
 }
 
-// Scan does scans the given value and return a representative metadata of sensitive configuration.
+// FieldReplace contains sensitive field metadata.
+type FieldReplace struct {
+	// SubjectID is the subjectID resolved at the struct-level.
+	// This field might be empty if it's not required by the upstream caller.
+	SubjectID string
+	// Name is the name of the sensitive field.
+	Name string
+	// RType is the original type of the sensitive field.
+	// Note that the type must be convertible to [string].
+	RType reflect.Type
+	// Kind is the user-defined type of sensitive data defined as 'sensitive' tag option.
+	Kind string
+
+	// Options are `sensitive` tag options
+	Options TagOptions
+}
+
+// ReplaceFunc is a callback function executed by [Struct.Replace] Method.
+// It does receive the sensitive field original value converted to string and returns the new value.
+type ReplaceFunc func(fr FieldReplace, val string) (string, error)
+
+// Scan scans the given value and returns a sensitive struct accessor.
 // It fails if the value is not a struct pointer or 'sensitive' tag is misconfigured.
 //
-// The returned metadata are mainly used by other hight-level functions
-// in this package with some few exceptions.
-func Scan(v any, requireSubject bool) (info sensitiveStruct, err error) {
+// [Struct] accessor and [Scan] function are low-level components
+// In most cases you may consider using [Redact] and [Mask].
+func Scan(v any, requireSubject bool) (accessor Struct, err error) {
 	defer func() {
 		// normalize error
 		if err != nil && !errors.Is(err, ErrUnsupportedType) {
@@ -60,22 +88,24 @@ func Scan(v any, requireSubject bool) (info sensitiveStruct, err error) {
 	if !ssType.hasSensitive {
 		// As struct doesn't have sensitive data, no need to proceed and resolve subject ID value.
 		// Therefore getting calling 'reflect.ValueOf', considering its cost, doesn't make sense.
-		info = sensitiveStruct{
+		accessor = sensitiveStruct{
 			typ: ssType,
 		}
 		return
 	}
 
-	info = sensitiveStruct{
+	structValue := sensitiveStruct{
 		typ: ssType,
 		val: reflect.ValueOf(v).Elem(),
 	}
 
 	if requireSubject {
-		if _, err = info.resolveSubject(); err != nil {
+		if _, err = structValue.resolveSubject(); err != nil {
 			return
 		}
 	}
+
+	accessor = structValue
 	return
 }
 
@@ -96,11 +126,11 @@ type sensitiveField struct {
 	sf                      reflect.StructField
 	isSub, isData, isNested bool
 	prefix                  string
-	replacement             string
 	isSlice, isMap          bool
 	nestedStructType        *sensitiveStructType
 	nestedStructTypeRef     reflect.Type
 	kind                    string
+	options                 TagOptions
 }
 
 func (f sensitiveField) getType(cache map[reflect.Type]*sensitiveStructType) *sensitiveStructType {
@@ -128,6 +158,8 @@ type sensitiveStruct struct {
 	subjectID string
 }
 
+func (ps sensitiveStruct) private() {}
+
 var _ Struct = &sensitiveStruct{}
 
 // resolveSubject resolves the sensitive struct subject ID value by walking through
@@ -153,30 +185,27 @@ func resolveSubject(pt sensitiveStructType, pv reflect.Value) (string, error) {
 		cacheMu.Lock()
 		ssT := ssField.getType(cache)
 		cacheMu.Unlock()
-		if ssT == nil {
-			// TBD return error instead??
-			panic(fmt.Errorf("unexpected: failed to resolve sensitive field type %v", ssField))
-		}
-
+		// I believe ssT can't be nil
+		ssTv := *ssT
 		sensitiveFieldV = reflect.Indirect(sensitiveFieldV)
 		nestedSubject := ""
 		switch {
 		case ssField.isSlice:
 			for i := 0; i < sensitiveFieldV.Len(); i++ {
-				nestedSubject, _ = resolveSubject(*ssT, sensitiveFieldV.Index(i))
+				nestedSubject, _ = resolveSubject(ssTv, sensitiveFieldV.Index(i))
 				if nestedSubject != "" {
 					break
 				}
 			}
 		case ssField.isMap:
 			for _, k := range sensitiveFieldV.MapKeys() {
-				nestedSubject, _ = resolveSubject(*ssT, sensitiveFieldV.MapIndex(k))
+				nestedSubject, _ = resolveSubject(ssTv, sensitiveFieldV.MapIndex(k))
 				if nestedSubject != "" {
 					break
 				}
 			}
 		default:
-			nestedSubject, _ = resolveSubject(*ssT, sensitiveFieldV)
+			nestedSubject, _ = resolveSubject(ssTv, sensitiveFieldV)
 		}
 
 		if nestedSubject != "" {
@@ -216,16 +245,6 @@ func (ss sensitiveStruct) HasSensitive() bool {
 	return ss.typ.hasSensitive
 }
 
-type FieldReplace struct {
-	SubjectID   string
-	Name        string
-	RType       reflect.Type
-	Replacement string
-	Kind        string
-}
-
-type ReplaceFunc func(fr FieldReplace, val string) (string, error)
-
 func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 	var (
 		newVal string
@@ -247,10 +266,10 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 			val := elem.String()
 
 			newVal, err = fn(FieldReplace{
-				SubjectID:   s.subjectID,
-				RType:       ssField.sf.Type,
-				Replacement: ssField.replacement,
-				Kind:        ssField.kind,
+				SubjectID: s.subjectID,
+				RType:     ssField.sf.Type,
+				Kind:      ssField.kind,
+				Options:   ssField.options,
 			}, val)
 			if err != nil {
 				return err
@@ -268,9 +287,7 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 			ssTPtr := ssField.getType(cache)
 			cacheMu.Unlock()
 
-			if ssTPtr == nil {
-				panic(fmt.Errorf("unexpected: failed to resolve sensitive field type %v", ssField))
-			}
+			// I believe ssTPtr can't be nil
 			ssT = *ssTPtr
 			if !ssT.hasSensitive {
 				continue
@@ -365,13 +382,13 @@ func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type) (sensi
 		}
 		name, opts := parseTag(tag)
 		ssField := sensitiveField{
-			sf:          field,
-			isSub:       name == tagSubjectID,
-			isData:      name == tagData,
-			isNested:    name == tagDive,
-			prefix:      opts["prefix"],
-			replacement: opts["replace"],
-			kind:        opts["kind"],
+			sf:       field,
+			isSub:    name == tagSubjectID,
+			isData:   name == tagData,
+			isNested: name == tagDive,
+			prefix:   opts["prefix"],
+			kind:     opts["kind"],
+			options:  opts,
 		}
 
 		switch {
@@ -427,6 +444,8 @@ func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type) (sensi
 			}
 
 			sensitiveFields = append(sensitiveFields, ssField)
+		default:
+			return sensitiveStructType{}, fmt.Errorf("invalid tag name '%s'", name)
 		}
 	}
 

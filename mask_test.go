@@ -8,27 +8,13 @@ import (
 )
 
 func TestMask(t *testing.T) {
-	type Device struct {
-		IPAddr string `sensitive:"data,kind=ipv4_addr"`
-	}
-
-	type CreditCard struct {
-		Number string `sensitive:"data,kind=credit_card"`
-	}
-
-	type Profile struct {
-		Email       string       `sensitive:"data,kind=email"`
-		Fullname    string       `sensitive:"data"`
-		Device      Device       `sensitive:"dive"`
-		CreditCards []CreditCard `sensitive:"dive"`
-	}
-
-	tcs := []struct {
+	type tc struct {
 		val  any
 		want any
 		ok   bool
 		err  error
-	}{
+	}
+	tcs := []tc{
 		{
 			val:  nil,
 			want: nil,
@@ -39,10 +25,14 @@ func TestMask(t *testing.T) {
 			val: &Profile{
 				Email:    "invalid_email.com",
 				Fullname: "Guadalupe Kemmer DDS",
-				Device: Device{
-					IPAddr: "169.251.207.194",
+				Devices: []Device{
+					{
+						IPAddr: "169.251.207.194",
+					},
+					{
+						IPAddr: "c64d:8716:fc03:5fed:4b91:e954:a083:9bad",
+					},
 				},
-				CreditCards: []CreditCard{{Number: "invalid_number"}},
 			},
 			// Mask fails if the predefined mask is incompatible with the sensitive value
 			ok: false,
@@ -51,21 +41,48 @@ func TestMask(t *testing.T) {
 			val: &Profile{
 				Email:    "email@example.com",
 				Fullname: "Guadalupe Kemmer DDS",
-				Device: Device{
-					IPAddr: "169.251.207.194",
+				Devices: []Device{
+					{
+						IPAddr: "169.251.207.194",
+					},
 				},
-				CreditCards: []CreditCard{{Number: "6706 7510 5149 0155"}},
 			},
 			want: &Profile{
 				Email:    "*****@example.com",
 				Fullname: "********************",
-				Device: Device{
-					IPAddr: "169.251.207.***",
+				Devices: []Device{
+					{
+						IPAddr: "169.251.207.***",
+					},
 				},
-				CreditCards: []CreditCard{{Number: "**** **** **** 0155"}},
 			},
 			ok: true,
 		},
+		func() tc {
+			// case of a sensitive data kind without a registered default mask.
+			// In this case the default redact func is used.
+			type Profile2 struct {
+				Profile         `sensitive:"dive"`
+				InsuranceNumber string `sensitive:"data,kind=test_insurance_number"`
+			}
+			return tc{
+				val: &Profile2{
+					Profile: Profile{
+						Email:    "email@example.com",
+						Fullname: "Guadalupe Kemmer DDS",
+					},
+					InsuranceNumber: "TN 31 12 58 F",
+				},
+				want: &Profile2{
+					Profile: Profile{
+						Email:    "*****@example.com",
+						Fullname: "********************",
+					},
+					InsuranceNumber: "*************",
+				},
+				ok: true,
+			}
+		}(),
 	}
 
 	for i, tc := range tcs {
@@ -84,9 +101,8 @@ func TestMask(t *testing.T) {
 				t.Fatal("expect err be nil, got", err)
 			}
 			if !reflect.DeepEqual(tc.want, tc.val) {
-				t.Fatalf("expect %s, %s be equals", tc.want, tc.val)
+				t.Fatalf("want %s, got %s", tc.want, tc.val)
 			}
 		})
 	}
-
 }

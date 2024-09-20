@@ -12,6 +12,9 @@ var (
 	tagDive      = "dive"
 )
 
+// TagOptions presents a map of options configured at `sensitive` tag.
+type TagOptions map[string]string
+
 func extractTag(rt reflect.StructTag) (tag string) {
 	for _, id := range tagIDs {
 		tag = rt.Get(id)
@@ -22,11 +25,7 @@ func extractTag(rt reflect.StructTag) (tag string) {
 	return
 }
 
-func parseTag(tagStr string) (name string, opts map[string]string) {
-	if tagStr == "" {
-		return
-	}
-
+func parseTag(tagStr string) (name string, opts TagOptions) {
 	parts := strings.Split(tagStr, ",")
 	name = strings.TrimSpace(parts[0])
 	opts = make(map[string]string)

@@ -14,3 +14,6 @@ bench:
 
 bench/profile:
 	go tool pprof -alloc_objects mem.prof
+
+doc:
+	godoc -http=:6060

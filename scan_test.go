@@ -7,24 +7,7 @@ import (
 	"testing"
 )
 
-type Email string
-
-type Profile struct {
-	ID    string  `sensitive:"subjectID"`
-	Email Email   `sensitive:"data"`
-	Phone *string `sensitive:"data"`
-}
-
-type Address struct {
-	Street string `sensitive:"data"`
-}
-
-func TestStruct_Scan(t *testing.T) {
-	// replaceFn does empty sensitive fields. This particular behavior makes testing easier.
-	replaceFn := func(fr FieldReplace, val string) (newVal string, err error) {
-		return "", nil
-	}
-
+func TestScan(t *testing.T) {
 	type tc struct {
 		val  any
 		want any
@@ -32,6 +15,37 @@ func TestStruct_Scan(t *testing.T) {
 		err  error
 	}
 	tcs := []tc{
+		{
+			val: ptr(&Profile{
+				ID:    "abc",
+				Email: "email@example.com",
+			}),
+			ok:  false,
+			err: ErrUnsupportedType,
+		},
+		{
+			val: &InvalidSubject{
+				Subject:  "abc",
+				Subject2: "abc2",
+			},
+			ok:  false,
+			err: ErrInvalidTagConfiguration,
+		},
+		{
+			val: &InvalidTag{
+				Data: "abc",
+			},
+			ok:  false,
+			err: ErrInvalidTagConfiguration,
+		},
+		{
+			val: &InvalidSubject{
+				Subject:  "abc",
+				Subject2: "abc2",
+			},
+			ok:  false,
+			err: ErrInvalidTagConfiguration,
+		},
 		{
 			val: &Profile{
 				ID:    "abc",
@@ -388,6 +402,11 @@ func TestStruct_Scan(t *testing.T) {
 		}(),
 	}
 
+	// replaceFn does empty sensitive fields. This particular behavior makes testing easier.
+	replaceFn := func(fr FieldReplace, val string) (newVal string, err error) {
+		return "", nil
+	}
+
 	for i, tc := range tcs {
 		t.Run("tc: "+strconv.Itoa(i+1), func(t *testing.T) {
 			s, err := Scan(tc.val, true)
@@ -402,6 +421,9 @@ func TestStruct_Scan(t *testing.T) {
 			}
 			_ = s.Replace(replaceFn)
 			if !reflect.DeepEqual(tc.want, tc.val) {
+				t.Fatalf("expect %s, %s be equals", tc.want, tc.val)
+			}
+			if !reflect.DeepEqual("abc", s.SubjectID()) {
 				t.Fatalf("expect %s, %s be equals", tc.want, tc.val)
 			}
 		})

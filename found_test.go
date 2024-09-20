@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestStruct_Found(t *testing.T) {
+func TestFound(t *testing.T) {
 	type tc struct {
 		val any
 		ok  bool
@@ -20,11 +20,26 @@ func TestStruct_Found(t *testing.T) {
 			err: ErrUnsupportedType,
 		},
 		{
+			val: InvalidTag{Data: "abc"},
+			ok:  false,
+			err: ErrInvalidTagConfiguration,
+		},
+		{
 			val: struct{ Val string }{Val: "value"},
 			ok:  false,
 		},
 		{
+			val: struct {
+				Val struct{} `sensitive:"data"`
+			}{Val: struct{}{}},
+			ok: false,
+		},
+		{
 			val: Address{Street: "578 Abbott Viaduct"},
+			ok:  true,
+		},
+		{
+			val: &Address{Street: "578 Abbott Viaduct"},
 			ok:  true,
 		},
 		{
@@ -37,15 +52,13 @@ func TestStruct_Found(t *testing.T) {
 
 	for i, tc := range tcs {
 		t.Run("tc: "+strconv.Itoa(i+1), func(t *testing.T) {
-
 			ok, err := Found(tc.val)
-
 			if got, want := err, tc.err; !errors.Is(got, want) {
-				t.Fatalf("expect %v, %v be equals", got, want)
+				t.Fatalf("want %v got %v", got, want)
 			}
 
 			if got, want := ok, tc.ok; got != want {
-				t.Fatalf("expect %v, %v be equals", got, want)
+				t.Fatalf("want %v got %v", want, got)
 			}
 		})
 	}

@@ -3,6 +3,8 @@ package sensitive
 import (
 	"errors"
 	"strings"
+
+	"github.com/ln80/struct-sensitive/option"
 )
 
 var (
@@ -34,24 +36,20 @@ func Redact(structPtr any, opts ...func(*RedactConfig)) error {
 	cfg := RedactConfig{
 		RedactFunc: DefaultRedactFunc,
 	}
-	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
-		opt(&cfg)
-	}
+	option.Apply(&cfg, opts)
+
 	if cfg.RedactFunc == nil {
 		return ErrRedactFuncNotFound
 	}
 
-	sensitiveStruct, err := Scan(structPtr, cfg.RequireSubjectID)
+	accessor, err := Scan(structPtr, cfg.RequireSubjectID)
 	if err != nil {
 		return err
 	}
 
-	if !sensitiveStruct.typ.hasSensitive {
+	if !accessor.HasSensitive() {
 		return nil
 	}
 
-	return sensitiveStruct.Replace(cfg.RedactFunc)
+	return accessor.Replace(cfg.RedactFunc)
 }

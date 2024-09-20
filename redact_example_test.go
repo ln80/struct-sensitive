@@ -7,7 +7,7 @@ import (
 	sensitive "github.com/ln80/struct-sensitive"
 )
 
-func Example_redact_simple() {
+func ExampleRedact() {
 	type Profile struct {
 		Email string `sensitive:"data"`
 	}
@@ -30,7 +30,7 @@ func Example_redact_simple() {
 
 }
 
-func Example_redact_custom() {
+func ExampleRedact_second() {
 	type Profile struct {
 		Email    string `sensitive:"data,kind=email"`
 		Fullname string `sensitive:"data,kind=name"`

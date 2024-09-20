@@ -7,13 +7,13 @@ import (
 	"testing"
 )
 
-func TestStruct_Redact(t *testing.T) {
+func TestRedact(t *testing.T) {
 	type tc struct {
-		val  any
-		want any
-		fn   ReplaceFunc
-		ok   bool
-		err  error
+		val    any
+		want   any
+		option func(*RedactConfig)
+		ok     bool
+		err    error
 	}
 
 	tcs := []tc{
@@ -46,8 +46,10 @@ func TestStruct_Redact(t *testing.T) {
 			testErr := errors.New("test replace error")
 			return tc{
 				val: &Address{Street: "070 a"},
-				fn: func(fr FieldReplace, val string) (string, error) {
-					return "", testErr
+				option: func(rc *RedactConfig) {
+					rc.RedactFunc = func(fr FieldReplace, val string) (string, error) {
+						return "", testErr
+					}
 				},
 				ok:  false,
 				err: testErr,
@@ -56,14 +58,24 @@ func TestStruct_Redact(t *testing.T) {
 		{
 			val:  &Address{Street: "070 a"},
 			want: &Address{Street: "*"},
-			fn: func(fr FieldReplace, val string) (string, error) {
-				return "*", nil
+			option: func(rc *RedactConfig) {
+				rc.RedactFunc = func(fr FieldReplace, val string) (string, error) {
+					return "*", nil
+				}
 			},
 			ok: true,
 		},
 		{
+			val:  &Address{Street: "070 a"},
+			want: &Address{Street: "*"},
+			option: func(rc *RedactConfig) {
+				rc.RedactFunc = nil
+			},
+			ok:  false,
+			err: ErrRedactFuncNotFound,
+		},
+		{
 			val: &Profile{
-				ID:    "", // Is not mandatory in the case of Redact
 				Email: "Vernon_Parker21@gmail.com",
 				Phone: ptr("250-308-0529"),
 			},
@@ -125,12 +137,14 @@ func TestStruct_Redact(t *testing.T) {
 					Email:    "****@****.com",
 					Fullname: "**************",
 				},
-				fn: func(fr FieldReplace, val string) (string, error) {
-					switch {
-					case fr.RType == reflect.TypeOf(Email("")):
-						return "****@****.com", nil
-					default:
-						return DefaultRedactFunc(fr, val)
+				option: func(rc *RedactConfig) {
+					rc.RedactFunc = func(fr FieldReplace, val string) (string, error) {
+						switch {
+						case fr.RType == reflect.TypeOf(Email("")):
+							return "****@****.com", nil
+						default:
+							return DefaultRedactFunc(fr, val)
+						}
 					}
 				},
 				ok: true,
@@ -140,12 +154,14 @@ func TestStruct_Redact(t *testing.T) {
 
 	for i, tc := range tcs {
 		t.Run("tc: "+strconv.Itoa(i+1), func(t *testing.T) {
-			err := Redact(tc.val, func(rc *RedactConfig) {
-				if tc.fn != nil {
-					rc.RedactFunc = tc.fn
-				}
-			})
+			err := Redact(tc.val, tc.option)
 			if !tc.ok {
+				if tc.err == nil {
+					if err == nil {
+						t.Fatal("expect err not to be nil")
+					}
+					return
+				}
 				if !errors.Is(err, tc.err) {
 					t.Fatalf("expect err is %v, got %v", tc.err, err)
 				}
