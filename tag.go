@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	tagIDs       = []string{"sens", "sensitive"}
+	tagIDs       = []string{"sensitive", "pii", "sens"}
 	tagSubjectID = "subjectID"
 	tagData      = "data"
 	tagDive      = "dive"
