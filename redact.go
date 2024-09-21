@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/ln80/struct-sensitive/option"
+	"github.com/ln80/struct-sensitive/internal/option"
 )
 
 var (
