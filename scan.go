@@ -376,7 +376,7 @@ func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type) (sensi
 			continue
 		}
 
-		tag := extractTag(field.Tag)
+		tag, _ := extractTag(field.Tag)
 		if tag == "" {
 			continue
 		}

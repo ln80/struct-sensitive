@@ -15,9 +15,49 @@ var (
 // TagOptions presents a map of options configured at `sensitive` tag.
 type TagOptions map[string]string
 
-func extractTag(rt reflect.StructTag) (tag string) {
+type TagPayload struct {
+	// ID is the tag ID ex `sensitive`, `pii`
+	ID string
+	// Name is the tag sensitive tag name ex `data`, `subjectID`
+	Name string
+	// Options presents the sensitive tag options
+	Options TagOptions
+}
+
+// Marshal returns back the string representation of the parsed tag.
+func (p TagPayload) Marshal() string {
+	return marshalTag(p)
+}
+
+// ParseTag looks for a sensitive tag in the given field raw tag,
+// parse it and returns a representational payload.
+// It returns nil if the tag not found or misconfigured.
+func ParseTag(rt reflect.StructTag) *TagPayload {
+	tag, tagID := extractTag(rt)
+	if tag == "" {
+		return nil
+	}
+	name, opts := parseTag(tag)
+	return &TagPayload{
+		ID:      tagID,
+		Name:    name,
+		Options: opts,
+	}
+}
+
+func marshalTag(payload TagPayload) string {
+	str := payload.ID + ":" + "\"" + payload.Name
+	for k, v := range payload.Options {
+		str += "," + k + "=" + v
+	}
+	str += "\""
+
+	return str
+}
+
+func extractTag(rt reflect.StructTag) (tag, tagID string) {
 	for _, id := range tagIDs {
-		tag = rt.Get(id)
+		tag, tagID = rt.Get(id), id
 		if tag != "" {
 			return
 		}
