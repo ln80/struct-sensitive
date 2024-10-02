@@ -32,9 +32,8 @@ jobs:
         run: |
           make test
 
-      # - name: Upload Test Coverage
-      #   if: ${{ (github.event_name == 'push') }}
-      #   run: |
-      #     go install github.com/mattn/goveralls@latest
-      #     goveralls -coverprofile=coverage.out -repotoken=${{ secrets.COVERALLS_TOKEN }}
-
+      - name: Upload Test Coverage
+        if: ${{ (github.event_name == 'push') }}
+        run: |
+          go install github.com/mattn/goveralls@latest
+          goveralls -coverprofile=coverage.out -repotoken=${{ secrets.COVERALLS_TOKEN }}
