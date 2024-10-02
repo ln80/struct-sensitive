@@ -85,6 +85,10 @@ For more usage and examples see the [Godoc](http://godoc.org/github.com/ln80/str
 - Customizable behaviors through options and callbacks
 - Supports multiple tag IDs: `sensitive`, `pii`, `sens` that can be used interchangeably.
 
+### Predefined masks:
+- `email`
+- `ipv4_addr`
+
 ## Limitations
 1.  Only fields of types convertible to `string` or `*string` are supported, although nesting structs directly or through collections (slices and maps) is also supported.
 
