@@ -5,8 +5,7 @@ lint:
 
 test: 
 	packages=`go list ./... | grep -v masktest`; \
-	go test -race -cover $$packages -coverprofile coverage.out -covermode atomic
-
+	go test -cover $$packages -coverprofile coverage.out -covermode count
 
 test/coverage:
 	go tool cover -html=coverage.out

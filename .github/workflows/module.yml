@@ -1,0 +1,40 @@
+name: Go Module
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ "1.22", "1.23" ]
+
+    steps:
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Check out code
+        uses: actions/checkout@v4
+    
+      - name: Install Dependencies
+        run: go mod download
+        env:
+          GOPROXY: https://proxy.golang.org,direct
+  
+      - name: Run Unit Tests
+        run: |
+          make test
+
+      # - name: Upload Test Coverage
+      #   if: ${{ (github.event_name == 'push') }}
+      #   run: |
+      #     go install github.com/mattn/goveralls@latest
+      #     goveralls -coverprofile=coverage.out -repotoken=${{ secrets.COVERALLS_TOKEN }}
+
