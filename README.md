@@ -50,9 +50,12 @@ _ = sensitive.Mask(&profile)
 // }
 ```
 
-Tags basic usage:
-- `sensitive:data` indicates that the field contains sensitive data.
+### Tags basic usage:
+
+- `sensitive:data` indicates that the field contains sensitive data and may also specify its kind (optional).
+
 - `sensitive:dive` specifies that the nested struct or the collection of structs contains sensitive fields.
+
 - `sensitive:subjectID` marks the field value as the subject identifier to whom the sensitive data belongs. Only one subject ID value is authorized at the struct level when required.
 
 Example of registering a default mask for a particular sensitive data kind (e.g., 'be_nrn'):
