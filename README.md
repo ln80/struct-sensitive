@@ -5,6 +5,8 @@ struct-sensitive
 
 This Go library leverages struct tags to identify and manage sensitive fields in structs, ensuring data protection and compliance with privacy standards.
 
+In simple terms, it provides Redact and Mask utilities for handling fields that contain sensitive data such as PII, PHI, PCI, SSN.
+
 ## Installation
 ```bash
 go get github.com/ln80/struct-sensitive
