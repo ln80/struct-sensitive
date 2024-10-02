@@ -1,11 +1,11 @@
 
 
-## struct-sensitive
+struct-sensitive
+============
 
 This Go library leverages struct tags to identify and manage sensitive fields in structs, ensuring data protection and compliance with privacy standards.
 
 ## Installation
-You can install the library using Go modules:
 ```bash
 go get github.com/ln80/struct-sensitive
 ```
@@ -22,7 +22,7 @@ type Device struct {
 type Profile struct {
     Email    string `sensitive:"data,kind=email"`
     Fullname string `sensitive:"data"`
-    Device   Device `pii:"dive"`
+    Device   Device `sensitive:"dive"`
 }
 
 var profile = Profile{
@@ -44,8 +44,11 @@ _ = sensitive.Mask(&profile)
 //   },
 // }
 ```
+For more usage and examples see the [Godoc](http://godoc.org/github.com/ln80/struct-sensitive).
+
 
 ## Features
 - Supports multiple tag IDs: `sensitive`, `pii`, `sens`
 - Provides functions for masking, redacting, and scanning sensitive data
-- Customizable through options and callbacks
+- Includes a set of predefined masks
+- Customizable behaviors through options and callbacks
