@@ -4,7 +4,7 @@
 struct-sensitive
 ============
 [![Coverage Status](https://coveralls.io/repos/github/ln80/struct-sensitive/badge.svg?branch=main)](https://coveralls.io/github/ln80/struct-sensitive?branch=main)
-
+[![GoDoc](https://godoc.org/github.com/ln80/struct-sensitive?status.svg)](https://godoc.org/github.com/ln80/struct-sensitive)
 
 This Go library leverages struct tags to identify and manage sensitive fields in structs, ensuring data protection and compliance with privacy standards.
 
