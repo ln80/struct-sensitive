@@ -4,7 +4,9 @@ lint:
 	golangci-lint run --enable misspell
 
 test: 
-	go test -race -cover ./... -coverprofile coverage.out -covermode atomic
+	packages=`go list ./... | grep -v masktest`; \
+	go test -race -cover $$packages -coverprofile coverage.out -covermode atomic
+
 
 test/coverage:
 	go tool cover -html=coverage.out

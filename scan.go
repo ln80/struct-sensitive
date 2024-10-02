@@ -15,45 +15,51 @@ var (
 	ErrSubjectIDNotFound       = errors.New("subject ID is not found")
 )
 
-// Struct presents an accessor to sensitive struct fields and subject.
+// Struct provides an accessor for sensitive struct fields and subject identifiers.
 type Struct interface {
-	// Replace accepts a replace function and calls it on each sensitive data field
+	// Replace accepts a replacement function and applies it to each sensitive data field.
 	Replace(fn ReplaceFunc) error
-	// SubjectID returns the resolved subjectID of the sensitive struct.
-	// It panics if the subjectID is not resolved.
+
+	// SubjectID returns the resolved SubjectID of the sensitive struct.
+	// It panics if the SubjectID is not resolved.
 	SubjectID() string
-	// HasSensitive tells wether or not the struct has sensitive data fields.
+
+	// HasSensitive indicates whether the struct contains sensitive data fields.
 	HasSensitive() bool
 
 	private()
 }
 
-// FieldReplace contains sensitive field metadata.
+// FieldReplace contains metadata for sensitive fields.
 type FieldReplace struct {
-	// SubjectID is the subjectID resolved at the struct-level.
-	// This field might be empty if it's not required by the upstream caller.
+	// SubjectID is the identifier for the sensitive data subject, resolved at the struct level.
+	// This field may be empty if it is not required by the calling function.
 	SubjectID string
+
 	// Name is the name of the sensitive field.
 	Name string
+
 	// RType is the original type of the sensitive field.
-	// Note that the type must be convertible to [string].
+	// Note that this type must be convertible to a string.
 	RType reflect.Type
-	// Kind is the user-defined type of sensitive data defined as 'sensitive' tag option.
+
+	// Kind is the user-defined type of sensitive data, defined as an option in the 'sensitive' tag.
 	Kind string
 
-	// Options are `sensitive` tag options
+	// Options are the options specified in the 'sensitive' tag.
 	Options TagOptions
 }
 
-// ReplaceFunc is a callback function executed by [Struct.Replace] Method.
-// It does receive the sensitive field original value converted to string and returns the new value.
+// ReplaceFunc is a callback function executed by the [Struct.Replace] method.
+// It receives the original value of the sensitive field, converted to a string,
+// and returns the new value as a string along with any error that may occur.
 type ReplaceFunc func(fr FieldReplace, val string) (string, error)
 
-// Scan scans the given value and returns a sensitive struct accessor.
-// It fails if the value is not a struct pointer or 'sensitive' tag is misconfigured.
+// Scan inspects the given value and returns an accessor for the sensitive struct.
+// It returns an error if the value is not a pointer to a struct or if the 'sensitive' tag is misconfigured.
 //
-// [Struct] accessor and [Scan] function are low-level components
-// In most cases you may consider using [Redact] and [Mask].
+// The [Struct] accessor and the [Scan] function are low-level components.
+// In most cases, you should consider using the [Redact] or [Mask] functions instead.
 func Scan(v any, requireSubject bool) (accessor Struct, err error) {
 	defer func() {
 		// normalize error
@@ -86,8 +92,8 @@ func Scan(v any, requireSubject bool) (accessor Struct, err error) {
 		return
 	}
 	if !ssType.hasSensitive {
-		// As struct doesn't have sensitive data, no need to proceed and resolve subject ID value.
-		// Therefore getting calling 'reflect.ValueOf', considering its cost, doesn't make sense.
+		// The struct does not contain sensitive data, so there is no need to resolve the subject ID value.
+		// Therefore, calling 'reflect.ValueOf' is unnecessary due to its associated cost.
 		accessor = sensitiveStruct{
 			typ: ssType,
 		}

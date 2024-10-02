@@ -6,9 +6,10 @@ import (
 	"reflect"
 )
 
-// Found returns wether or not the struct contains sensitive data fields.
-// It returns an error if 'sensitive' tag is misconfigured or the value param isn't a struct or struct pointer.
-func Found(v any) (found bool, err error) {
+// Check verifies whether the provided struct contains sensitive data fields.
+// It returns an error if the 'sensitive' tag is misconfigured or if the value parameter
+// is not a struct or a pointer to a struct.
+func Check(v any) (found bool, err error) {
 	defer func() {
 		// normalize error
 		if err != nil && !errors.Is(err, ErrUnsupportedType) {
