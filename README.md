@@ -21,7 +21,7 @@ Here's a basic example of how to use the library:
 
 ```go
 type Device struct {
-	IP string `pii:"data,kind=ipv4_addr"`
+    IP string `pii:"data,kind=ipv4_addr"`
 }
 
 type Profile struct {
@@ -31,11 +31,11 @@ type Profile struct {
 }
 
 var profile = Profile{
-	Email:    "eric.prosacco@example.com",
-	Fullname: "Eric Prosacco",
-	Device: Device{
-		IP: "28.175.98.7",
-	},
+    Email:    "eric.prosacco@example.com",
+    Fullname: "Eric Prosacco",
+    Device: Device{
+        IP: "28.175.98.7",
+    },
 }
 
 _ = sensitive.Mask(&profile)
@@ -50,13 +50,24 @@ _ = sensitive.Mask(&profile)
 // }
 ```
 
+Tags basic usage:
+- `sensitive:data` indicates that the field contains sensitive data.
+- `sensitive:dive` specifies that the nested struct or the collection of structs contains sensitive fields.
+- `sensitive:subjectID` marks the field value as the subject identifier to whom the sensitive data belongs. Only one subject ID value is authorized at the struct level when required.
+
 Example of registering a default mask for a particular sensitive data kind (e.g., 'be_nrn'):
 
 ```go
+import (
+    "github.com/ln80/struct-sensitive/mask"
+)
+
+...
+
 var defaultMask := func(val string) (masked string, err error) {
-	// TODO implement 'be_nrn' mask behavior here
+    // TODO implement 'be_nrn' mask behavior here
     masked = "**.**.**-***-**"
-	return
+    return
 }
 
 mask.Register("be_nrn", defaultMask)
@@ -69,7 +80,7 @@ For more usage and examples see the [Godoc](http://godoc.org/github.com/ln80/str
 - Provides functions for masking, redacting, and scanning sensitive data
 - Includes a set of predefined masks
 - Customizable behaviors through options and callbacks
-- Supports multiple tag IDs: `sensitive`, `pii`, `sens`
+- Supports multiple tag IDs: `sensitive`, `pii`, `sens` that can be used interchangeably.
 
 ## Limitations
 1.  Only fields of types convertible to `string` or `*string` are supported, although nesting structs directly or through collections (slices and maps) is also supported.
