@@ -143,7 +143,7 @@ func TestRedact(t *testing.T) {
 						case fr.RType == reflect.TypeOf(Email("")):
 							return "****@****.com", nil
 						default:
-							return DefaultRedactFunc(fr, val)
+							return RedactDefaultFunc(fr, val)
 						}
 					}
 				},

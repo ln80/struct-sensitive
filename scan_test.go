@@ -93,6 +93,28 @@ func TestScan(t *testing.T) {
 		func() tc {
 			type T struct {
 				Profile `sensitive:"dive"`
+				ignore  string `sensitive:"data"`
+			}
+			return tc{
+				val: &T{
+					Profile: Profile{
+						ID:    "abc",
+						Email: "email@example.com",
+					},
+					ignore: "abc",
+				},
+				want: &T{
+					Profile: Profile{
+						ID: "abc",
+					},
+					ignore: "abc",
+				},
+				ok: true,
+			}
+		}(),
+		func() tc {
+			type T struct {
+				Profile `sensitive:"dive"`
 				Address *Address `sensitive:"dive"`
 			}
 			return tc{

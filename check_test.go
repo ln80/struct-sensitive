@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestFound(t *testing.T) {
+func TestCheck(t *testing.T) {
 	type tc struct {
 		val any
 		ok  bool
@@ -52,7 +52,7 @@ func TestFound(t *testing.T) {
 
 	for i, tc := range tcs {
 		t.Run("tc: "+strconv.Itoa(i+1), func(t *testing.T) {
-			ok, err := Found(tc.val)
+			ok, err := Check(tc.val)
 			if got, want := err, tc.err; !errors.Is(got, want) {
 				t.Fatalf("want %v got %v", got, want)
 			}
