@@ -106,3 +106,29 @@ func TestMask(t *testing.T) {
 		})
 	}
 }
+
+func TestMaskedCopy(t *testing.T) {
+	profile := Profile{
+		Email:    "email@example.com",
+		Fullname: "Guadalupe Kemmer DDS",
+	}
+
+	copy, err := NewMaskedCopy(profile)
+	if err != nil {
+		t.Fatal("expect err be nil, got", err)
+	}
+
+	maskedCopy := copy.Value()
+
+	if reflect.DeepEqual(profile, maskedCopy) {
+		t.Fatalf("expect not be equals %v, %v", profile, maskedCopy)
+	}
+
+	if err := Mask(&profile); err != nil {
+		t.Fatal("expect err be nil, got", err)
+	}
+
+	if !reflect.DeepEqual(profile, maskedCopy) {
+		t.Fatalf("expect be equals %v, %v", profile, maskedCopy)
+	}
+}

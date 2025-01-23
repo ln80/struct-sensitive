@@ -42,6 +42,10 @@ func (p TagPayload) Marshal() string {
 	return marshalTag(p)
 }
 
+func (p TagPayload) String() string {
+	return p.Marshal()
+}
+
 // ParseTag searches for a sensitive tag in the given field's raw tag,
 // parses it, and returns a representational payload.
 // It returns nil if the tag is not found or is misconfigured.
