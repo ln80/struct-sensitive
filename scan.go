@@ -280,8 +280,17 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 			if err != nil {
 				return err
 			}
+
 			if newVal != val {
-				elem.SetString(newVal)
+				switch ssField.sf.Type.Kind() {
+				case reflect.String:
+					elem.SetString(newVal)
+				default:
+					vv := reflect.ValueOf(newVal)
+					if vv.IsValid() && vv.Type().ConvertibleTo(elem.Type()) {
+						elem.Set(vv.Convert(elem.Type()))
+					}
+				}
 			}
 			continue
 		}
@@ -414,7 +423,10 @@ func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type) (sensi
 				tt = tt.Elem()
 			}
 			if tt.Kind() != reflect.String {
-				continue
+				if !field.Type.ConvertibleTo(stringType) {
+					// return sensitiveStructType{}, ErrUnsupportedFieldType
+					continue
+				}
 			}
 			sensitiveFields = append(sensitiveFields, ssField)
 
