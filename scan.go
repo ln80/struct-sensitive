@@ -422,11 +422,8 @@ func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type) (sensi
 			if tt.Kind() == reflect.Ptr {
 				tt = tt.Elem()
 			}
-			if tt.Kind() != reflect.String {
-				if !field.Type.ConvertibleTo(stringType) {
-					// return sensitiveStructType{}, ErrUnsupportedFieldType
-					continue
-				}
+			if tt.Kind() != reflect.String && !field.Type.ConvertibleTo(stringType) {
+				continue
 			}
 			sensitiveFields = append(sensitiveFields, ssField)
 
