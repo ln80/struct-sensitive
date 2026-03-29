@@ -269,7 +269,12 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 		elem := reflect.Indirect(v)
 
 		if ssField.isData {
-			val := elem.String()
+			var val string
+			if elem.Type().ConvertibleTo(stringType) {
+				val = elem.Convert(stringType).String()
+			} else {
+				val = elem.String()
+			}
 
 			newVal, err = fn(FieldReplace{
 				SubjectID: s.subjectID,
