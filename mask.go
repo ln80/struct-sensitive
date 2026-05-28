@@ -48,31 +48,38 @@ type Masked[T any] struct {
 }
 
 type MaskedCopyConfig struct {
-	DeepCopy bool // default false
+	// DeepCopy controls whether the original value is deep-copied before masking.
+	// Defaults to true. Setting to false is unsafe when the struct contains pointer,
+	// slice, or map fields, as Reveal() may return partially masked data.
+	DeepCopy bool
 }
 
 // NewMaskedCopy returns a new masked copy of the given value.
 // It fails if it can't copy the value or the mask config is invalid.
 func NewMaskedCopy[T any](v T, opts ...func(*MaskedCopyConfig)) (*Masked[T], error) {
 	cfg := MaskedCopyConfig{
-		DeepCopy: false,
+		DeepCopy: true,
 	}
 	option.Apply(&cfg, opts)
 
-	var copy = v
+	masked := v
 	if cfg.DeepCopy {
-		c, err := copystructure.Copy(v)
+		// Deep-copy the original to prevent shared pointers between original and masked values.
+		// Without this, masking through shared *string/slice/map fields corrupts the original.
+		orig, err := copystructure.Copy(v)
 		if err != nil {
 			return nil, errors.Join(ErrFailedToMaskCopy, err)
 		}
-		copy = c.(T)
+		if err := Mask(&masked); err != nil {
+			return nil, errors.Join(ErrFailedToMaskCopy, err)
+		}
+		return &Masked[T]{value: masked, original: orig.(T)}, nil
 	}
 
-	if err := Mask(&copy); err != nil {
+	if err := Mask(&masked); err != nil {
 		return nil, errors.Join(ErrFailedToMaskCopy, err)
 	}
-
-	return &Masked[T]{value: copy, original: v}, nil
+	return &Masked[T]{value: masked, original: v}, nil
 }
 
 // MaskedCopy returns a masked copy of the given value.

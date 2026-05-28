@@ -24,7 +24,7 @@ Here's an example:
 
 Applying the default masking logic:
 
-	var profile := Profile{
+	profile := Profile{
 		Email:    "eric.prosacco@example.com",
 		Fullname: "Eric Prosacco",
 		Role:     "Teacher",
@@ -35,7 +35,7 @@ Applying the default masking logic:
 	// After masking:
 	//
 	// Profile{
-	//   Email: "****.********@example.com",
+	//   Email: "*************@example.com",
 	//   Fullname: "*************",
 	//   Role: "Teacher",
 	// }
@@ -54,7 +54,7 @@ Applying a custom redact logic:
 		Role     string
 	}
 
-	var profile := Profile{
+	profile := Profile{
 		Email:    "eric.prosacco@example.com",
 		Fullname: "Eric Prosacco",
 		Role:     "Teacher",

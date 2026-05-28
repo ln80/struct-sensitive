@@ -11,7 +11,7 @@ var (
 	ErrRedactFuncNotFound = errors.New("redact function not found")
 )
 
-// RedactConfig presents the configuration required by `sensitive.Redact`.
+// RedactConfig holds the configuration for [Redact].
 type RedactConfig struct {
 	// RequireSubjectID force the subjectID resolution from the struct value.
 	// This config is disabled by default.

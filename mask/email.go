@@ -3,12 +3,14 @@ package mask
 import (
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ln80/struct-sensitive/internal/option"
 )
 
 type EmailConfig struct {
-	MaskDomain bool // default false
+	MaskDomain           bool // default false
+	KeepFirstAndLastChar bool // default false
 }
 
 func Email(email string, opts ...func(*Config[EmailConfig])) (string, error) {
@@ -22,7 +24,19 @@ func Email(email string, opts ...func(*Config[EmailConfig])) (string, error) {
 		return "", errors.New("invalid email format")
 	}
 
-	local := strings.Repeat(string([]rune{cfg.Symbol}), len(parts[0]))
+	// Use rune count for correct multi-byte character handling
+	localRunes := []rune(parts[0])
+	localRuneCount := utf8.RuneCountInString(parts[0])
+
+	var local string
+	if cfg.Kind.KeepFirstAndLastChar && localRuneCount > 2 {
+		firstChar := string(localRunes[0])
+		lastChar := string(localRunes[localRuneCount-1])
+		middle := strings.Repeat(string([]rune{cfg.Symbol}), localRuneCount-2)
+		local = firstChar + middle + lastChar
+	} else {
+		local = strings.Repeat(string([]rune{cfg.Symbol}), localRuneCount)
+	}
 
 	domain := parts[1]
 	if cfg.Kind.MaskDomain {

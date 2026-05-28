@@ -13,15 +13,15 @@ jobs:
     steps:
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: 1.22
+          go-version: 1.24
 
       - name: Check out code
         uses: actions/checkout@v4
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.60
+          version: v2.12
           args: --enable misspell

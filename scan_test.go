@@ -439,6 +439,57 @@ func TestScan(t *testing.T) {
 				ok: true,
 			}
 		}(),
+		func() tc {
+			type T struct {
+				ID   string   `sensitive:"subjectID"`
+				Tags []string `sensitive:"data"`
+			}
+			return tc{
+				val: &T{
+					ID:   "abc",
+					Tags: []string{"tag1", "tag2", "tag3"},
+				},
+				want: &T{
+					ID:   "abc",
+					Tags: []string{"", "", ""},
+				},
+				ok: true,
+			}
+		}(),
+		func() tc {
+			type T struct {
+				ID   string   `sensitive:"subjectID"`
+				Tags []string `sensitive:"data"`
+			}
+			return tc{
+				val: &T{
+					ID:   "abc",
+					Tags: nil,
+				},
+				want: &T{
+					ID:   "abc",
+					Tags: nil,
+				},
+				ok: true,
+			}
+		}(),
+		func() tc {
+			type T struct {
+				ID    string    `sensitive:"subjectID"`
+				Names []*string `sensitive:"data"`
+			}
+			return tc{
+				val: &T{
+					ID:    "abc",
+					Names: []*string{ptr("Alice"), ptr("Bob")},
+				},
+				want: &T{
+					ID:    "abc",
+					Names: []*string{ptr(""), ptr("")},
+				},
+				ok: true,
+			}
+		}(),
 	}
 
 	// replaceFn does empty sensitive fields. This particular behavior makes testing easier.
