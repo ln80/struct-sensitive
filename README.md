@@ -72,7 +72,7 @@ import (
 
 ...
 
-var defaultMask := func(val string) (masked string, err error) {
+defaultMask := func(val string) (masked string, err error) {
     // TODO implement 'be_nrn' mask behavior here
     masked = "**.**.**-***-**"
     return
@@ -97,9 +97,7 @@ For more usage and examples see the [Godoc](http://godoc.org/github.com/ln80/str
 - `fullname`
 
 ## Limitations
-1.  Only fields of types convertible to `string` or `*string` are supported, although nesting structs directly or through collections (slices and maps) is also supported.
+1.  Only fields of types convertible to `string` or `*string` are supported, although nesting structs directly or through collections (slices and maps) is also supported. String slices (`[]string`, `[]*string`) are supported as data fields.
 
 2. Self-Referencing Types are supported, allowing types to include fields of the same type. However, Self-Referencing Values (instances that create a reference loop) are not supported.
-
-3. At the moment, collections of types convertible to `string` or `*string` are not supported.
 

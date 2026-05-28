@@ -113,12 +113,12 @@ func TestMaskedCopy(t *testing.T) {
 		Fullname: "Guadalupe Kemmer DDS",
 	}
 
-	copy, err := NewMaskedCopy(profile)
+	cp, err := NewMaskedCopy(profile)
 	if err != nil {
 		t.Fatal("expect err be nil, got", err)
 	}
 
-	maskedCopy := copy.Value()
+	maskedCopy := cp.Value()
 
 	if reflect.DeepEqual(profile, maskedCopy) {
 		t.Fatalf("expect not be equals %v, %v", profile, maskedCopy)
@@ -130,5 +130,45 @@ func TestMaskedCopy(t *testing.T) {
 
 	if !reflect.DeepEqual(profile, maskedCopy) {
 		t.Fatalf("expect be equals %v, %v", profile, maskedCopy)
+	}
+}
+
+func TestMaskedCopy_PointerFields(t *testing.T) {
+	original := Profile{
+		ID:       "usr-1",
+		Email:    "email@example.com",
+		Fullname: "Guadalupe Kemmer DDS",
+		Phone:    ptr("519-491-6780"),
+		Devices: []Device{
+			{IPAddr: "169.251.207.194"},
+		},
+	}
+
+	cp, err := NewMaskedCopy(original)
+	if err != nil {
+		t.Fatal("expect err be nil, got", err)
+	}
+
+	revealed := cp.Reveal()
+
+	if revealed.Email != "email@example.com" {
+		t.Fatalf("Reveal().Email: want original, got %q", revealed.Email)
+	}
+	if revealed.Fullname != "Guadalupe Kemmer DDS" {
+		t.Fatalf("Reveal().Fullname: want original, got %q", revealed.Fullname)
+	}
+	if *revealed.Phone != "519-491-6780" {
+		t.Fatalf("Reveal().Phone: want original, got %q", *revealed.Phone)
+	}
+	if revealed.Devices[0].IPAddr != "169.251.207.194" {
+		t.Fatalf("Reveal().Devices[0].IPAddr: want original, got %q", revealed.Devices[0].IPAddr)
+	}
+
+	masked := cp.Value()
+	if masked.Email == "email@example.com" {
+		t.Fatal("Value().Email should be masked")
+	}
+	if *masked.Phone == "519-491-6780" {
+		t.Fatal("Value().Phone should be masked")
 	}
 }

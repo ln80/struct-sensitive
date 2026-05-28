@@ -21,7 +21,7 @@ func TestFullName(t *testing.T) {
 		},
 		{
 			Value: "X Æ A-12 Musk",
-			Want:  "X ** **** M***",
+			Want:  "X * **** M***",
 			OK:    true,
 		},
 	})

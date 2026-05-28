@@ -78,9 +78,7 @@ func Scan(v any, requireSubject bool) (accessor Struct, err error) {
 		err = fmt.Errorf("%w '%v'", ErrUnsupportedType, tt)
 		return
 	}
-	if tt.Kind() == reflect.Pointer {
-		tt = tt.Elem()
-	}
+	tt = tt.Elem()
 	if tt.Kind() != reflect.Struct {
 		err = fmt.Errorf("%w '%v'", ErrUnsupportedType, tt)
 		return
@@ -131,6 +129,7 @@ type sensitiveStructContext struct {
 type sensitiveField struct {
 	sf                      reflect.StructField
 	isSub, isData, isNested bool
+	isDataSlice             bool
 	prefix                  string
 	isSlice, isMap          bool
 	nestedStructType        *sensitiveStructType
@@ -147,7 +146,6 @@ func (f sensitiveField) getType(cache map[reflect.Type]*sensitiveStructType) *se
 }
 
 func (f sensitiveField) IsZero() bool {
-	// TBD find a better condition??
 	return f.sf.Name == ""
 }
 
@@ -188,10 +186,13 @@ func resolveSubject(pt sensitiveStructType, pv reflect.Value) (string, error) {
 			continue
 		}
 
-		cacheMu.Lock()
+		// Read-only cache access: use RLock to allow concurrent lookups
+		cacheMu.RLock()
 		ssT := ssField.getType(cache)
-		cacheMu.Unlock()
-		// I believe ssT can't be nil
+		cacheMu.RUnlock()
+		if ssT == nil {
+			panic("struct-sensitive: cached nested struct type is unexpectedly nil")
+		}
 		ssTv := *ssT
 		sensitiveFieldV = reflect.Indirect(sensitiveFieldV)
 		nestedSubject := ""
@@ -268,6 +269,42 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 		}
 		elem := reflect.Indirect(v)
 
+		if ssField.isData && ssField.isDataSlice {
+			for i := 0; i < elem.Len(); i++ {
+				el := reflect.Indirect(elem.Index(i))
+				var val string
+				if el.Type().ConvertibleTo(stringType) {
+					val = el.Convert(stringType).String()
+				} else {
+					val = el.String()
+				}
+
+				newVal, err = fn(FieldReplace{
+					SubjectID: s.subjectID,
+					Name:      ssField.sf.Name,
+					RType:     ssField.sf.Type,
+					Kind:      ssField.kind,
+					Options:   ssField.options,
+				}, val)
+				if err != nil {
+					return err
+				}
+
+				if newVal != val {
+					switch el.Kind() {
+					case reflect.String:
+						el.SetString(newVal)
+					default:
+						vv := reflect.ValueOf(newVal)
+						if vv.IsValid() && vv.Type().ConvertibleTo(el.Type()) {
+							el.Set(vv.Convert(el.Type()))
+						}
+					}
+				}
+			}
+			continue
+		}
+
 		if ssField.isData {
 			var val string
 			if elem.Type().ConvertibleTo(stringType) {
@@ -278,6 +315,7 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 
 			newVal, err = fn(FieldReplace{
 				SubjectID: s.subjectID,
+				Name:      ssField.sf.Name,
 				RType:     ssField.sf.Type,
 				Kind:      ssField.kind,
 				Options:   ssField.options,
@@ -287,7 +325,15 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 			}
 
 			if newVal != val {
-				switch ssField.sf.Type.Kind() {
+				// Zero out original []byte backing array to prevent sensitive data
+				// from lingering in memory. Unlike string (immutable), []byte can be scrubbed.
+				if elem.Kind() == reflect.Slice && elem.Type().Elem().Kind() == reflect.Uint8 {
+					for i := range elem.Bytes() {
+						elem.Bytes()[i] = 0
+					}
+				}
+
+				switch elem.Kind() {
 				case reflect.String:
 					elem.SetString(newVal)
 				default:
@@ -303,11 +349,13 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 		if ssField.isNested {
 			var ssT sensitiveStructType
 
-			cacheMu.Lock()
+			// Read-only cache access: use RLock to allow concurrent lookups
+			cacheMu.RLock()
 			ssTPtr := ssField.getType(cache)
-			cacheMu.Unlock()
-
-			// I believe ssTPtr can't be nil
+			cacheMu.RUnlock()
+			if ssTPtr == nil {
+				panic("struct-sensitive: cached nested struct type is unexpectedly nil")
+			}
 			ssT = *ssTPtr
 			if !ssT.hasSensitive {
 				continue
@@ -331,7 +379,7 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 					if mapElem.IsZero() {
 						continue
 					}
-					mapElem = reflect.Indirect(elem.MapIndex(k))
+					mapElem = reflect.Indirect(mapElem)
 					if !mapElem.CanAddr() {
 						newElem := reflect.New(mapElem.Type()).Elem()
 						newElem.Set(mapElem)
@@ -372,23 +420,32 @@ func (s sensitiveStruct) Replace(fn ReplaceFunc) error {
 }
 
 func scanStructType(rt reflect.Type) (sensitiveStructType, error) {
+	// Fast path: check cache with read lock (avoids exclusive lock contention on cache hits)
+	cacheMu.RLock()
+	if cached, ok := cache[rt]; ok {
+		cacheMu.RUnlock()
+		return *cached, nil
+	}
+	cacheMu.RUnlock()
+
+	// Slow path: acquire exclusive lock for cache population
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-
-	if _, ok := cache[rt]; !ok {
-		c := sensitiveStructContext{seen: cache}
-		ssT, err := scanStructTypeWithContext(c, rt)
-		if err != nil {
-			return sensitiveStructType{}, err
-		}
-		cache[rt] = &ssT
+	if cached, ok := cache[rt]; ok {
+		return *cached, nil
 	}
 
+	c := sensitiveStructContext{seen: cache}
+	ssT, err := scanStructTypeWithContext(c, rt)
+	if err != nil {
+		return sensitiveStructType{}, err
+	}
+	cache[rt] = &ssT
 	return *cache[rt], nil
 }
 
 func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type) (sensitiveStructType, error) {
-	sensitiveFields := make([]sensitiveField, 0)
+	sensitiveFields := make([]sensitiveField, 0, rt.NumField())
 	var subjectField sensitiveField
 	for i := 0; i < rt.NumField(); i++ {
 		field := rt.Field(i)
@@ -427,7 +484,21 @@ func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type) (sensi
 			if tt.Kind() == reflect.Ptr {
 				tt = tt.Elem()
 			}
-			if tt.Kind() != reflect.String && !field.Type.ConvertibleTo(stringType) {
+			// Support []T where T has Kind string (e.g., []string, []*string).
+			// Exclude []byte: the whole slice is convertible to string and handled below.
+			if tt.Kind() == reflect.Slice && !tt.ConvertibleTo(stringType) {
+				elemType := tt.Elem()
+				if elemType.Kind() == reflect.Ptr {
+					elemType = elemType.Elem()
+				}
+				if elemType.Kind() == reflect.String {
+					ssField.isDataSlice = true
+					sensitiveFields = append(sensitiveFields, ssField)
+				}
+				continue
+			}
+			// Use tt (pointer-unwrapped type) for the convertibility check, not field.Type
+			if tt.Kind() != reflect.String && !tt.ConvertibleTo(stringType) {
 				continue
 			}
 			sensitiveFields = append(sensitiveFields, ssField)

@@ -14,7 +14,7 @@ var (
 	tagDive      = "dive"
 )
 
-// TagOptions presents a map of options configured at the `sensitive` tag.
+// TagOptions is a map of options configured in the `sensitive` tag.
 type TagOptions map[string]string
 
 func (m TagOptions) Get(name string) string {

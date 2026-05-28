@@ -3,6 +3,7 @@ package mask
 import (
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ln80/struct-sensitive/internal/option"
 )
@@ -23,16 +24,18 @@ func Email(email string, opts ...func(*Config[EmailConfig])) (string, error) {
 		return "", errors.New("invalid email format")
 	}
 
+	// Use rune count for correct multi-byte character handling
+	localRunes := []rune(parts[0])
+	localRuneCount := utf8.RuneCountInString(parts[0])
+
 	var local string
-	if cfg.Kind.KeepFirstAndLastChar && len(parts[0]) > 2 {
-		// Keep first and last character, mask the rest
-		firstChar := string([]rune(parts[0])[0])
-		lastChar := string([]rune(parts[0])[len([]rune(parts[0]))-1])
-		middle := strings.Repeat(string([]rune{cfg.Symbol}), len([]rune(parts[0]))-2)
+	if cfg.Kind.KeepFirstAndLastChar && localRuneCount > 2 {
+		firstChar := string(localRunes[0])
+		lastChar := string(localRunes[localRuneCount-1])
+		middle := strings.Repeat(string([]rune{cfg.Symbol}), localRuneCount-2)
 		local = firstChar + middle + lastChar
 	} else {
-		// Mask the entire local part
-		local = strings.Repeat(string([]rune{cfg.Symbol}), len(parts[0]))
+		local = strings.Repeat(string([]rune{cfg.Symbol}), localRuneCount)
 	}
 
 	domain := parts[1]

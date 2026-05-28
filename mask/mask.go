@@ -18,7 +18,7 @@ func DefaultConfig[T any](t T) Config[T] {
 	}
 }
 
-// Masker presents the function type that masks must satisfy.
+// Masker is the function type that masks must satisfy.
 type Masker[T any] func(val string, opts ...func(*Config[T])) (string, error)
 
 // defaultMasker is a masker that doesn't support options
@@ -44,8 +44,9 @@ func Register(kind string, m defaultMasker) {
 
 // Of returns the specific default masker of the given kind.
 func Of(kind string) (m defaultMasker, found bool) {
-	maskMu.Lock()
-	defer maskMu.Unlock()
+	// Read-only access: use RLock to allow concurrent mask lookups
+	maskMu.RLock()
+	defer maskMu.RUnlock()
 
 	m, found = maskRegistry[kind]
 	return
