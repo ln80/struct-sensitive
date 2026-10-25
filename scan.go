@@ -10,7 +10,7 @@ import (
 var (
 	ErrInvalidTagConfiguration = errors.New("invalid 'sensitive' tag configuration")
 	ErrUnsupportedType         = errors.New("unsupported 'sensitive' type")
-	ErrUnsupportedFieldType    = errors.New("'sensitive' field type must be convertible to string")
+	ErrUnsupportedFieldType    = errors.New("unsupported 'sensitive' field type")
 	ErrMultipleNestedSubjectID = errors.New("potential multiple nested subject IDs")
 	ErrSubjectIDNotFound       = errors.New("subject ID is not found")
 )
@@ -117,6 +117,35 @@ var (
 	stringType = reflect.TypeFor[string]()
 )
 
+// isSubjectIDType reports whether t is a valid subjectID field type.
+// Accepted types are string kinds (including named strings) and slices of
+// bytes (including named []byte). Other kinds that Go can convert to string,
+// such as integers and []rune, are rejected.
+func isSubjectIDType(t reflect.Type) bool {
+	if t.Kind() == reflect.String {
+		return true
+	}
+	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
+}
+
+// subjectIDValue returns the subject text for a field accepted by isSubjectIDType.
+// []byte is converted to string; Value.String() would return a placeholder
+// such as "<[]uint8 Value>" for every slice.
+func subjectIDValue(v reflect.Value) string {
+	v = reflect.Indirect(v)
+	switch v.Kind() {
+	case reflect.String:
+		return v.String()
+	case reflect.Slice:
+		if v.IsNil() {
+			return ""
+		}
+		return v.Convert(stringType).String()
+	default:
+		return ""
+	}
+}
+
 var (
 	cache   map[reflect.Type]*sensitiveStructType = make(map[reflect.Type]*sensitiveStructType)
 	cacheMu sync.RWMutex
@@ -173,7 +202,7 @@ var _ Struct = &sensitiveStruct{}
 func resolveSubject(pt sensitiveStructType, pv reflect.Value) (string, error) {
 	subject := ""
 	if !pt.subField.IsZero() {
-		subject = pt.subField.prefix + reflect.Indirect(pv.FieldByIndex(pt.subField.sf.Index)).String()
+		subject = pt.subField.prefix + subjectIDValue(pv.FieldByIndex(pt.subField.sf.Index))
 	}
 
 	for _, ssField := range pt.sensitiveFields {
@@ -470,8 +499,11 @@ func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type) (sensi
 
 		switch {
 		case ssField.isSub:
-			if !field.Type.ConvertibleTo(stringType) {
-				return sensitiveStructType{}, ErrUnsupportedFieldType
+			// String kinds and []byte only. Integers are convertible to string,
+			// but that conversion is a rune conversion, so every numeric id would
+			// collapse or turn into a character. Reject them here.
+			if !isSubjectIDType(field.Type) {
+				return sensitiveStructType{}, fmt.Errorf("%w: subjectID %s %s", ErrUnsupportedFieldType, field.Name, field.Type)
 			}
 
 			if !subjectField.IsZero() {
