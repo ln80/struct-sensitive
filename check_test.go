@@ -32,7 +32,8 @@ func TestCheck(t *testing.T) {
 			val: struct {
 				Val struct{} `sensitive:"data"`
 			}{Val: struct{}{}},
-			ok: false,
+			ok:  false,
+			err: ErrInvalidTagConfiguration,
 		},
 		{
 			val: Address{Street: "578 Abbott Viaduct"},

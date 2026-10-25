@@ -43,7 +43,9 @@ var profile = Profile{
     },
 }
 
-_ = sensitive.Mask(&profile)
+if err := sensitive.Mask(&profile); err != nil {
+    // The struct is fully redacted. err names the field path, not the value.
+}
 
 // Output:
 // Profile{
@@ -78,7 +80,10 @@ defaultMask := func(val string) (masked string, err error) {
     return
 }
 
-mask.Register("be_nrn", defaultMask)
+if err := mask.Register("be_nrn", defaultMask); err != nil {
+    // Register rejects a nil function, an empty kind, and a kind that already exists.
+    // Use mask.Override to replace a mask on purpose.
+}
 ```
 
 For more usage and examples see the [Godoc](http://godoc.org/github.com/ln80/struct-sensitive).
@@ -91,13 +96,15 @@ For more usage and examples see the [Godoc](http://godoc.org/github.com/ln80/str
 - Supports multiple tag IDs: `sensitive`, `pii`, `sens` that can be used interchangeably.
 
 ### Predefined masks:
-- `email`
-- `ipv4_addr`
-- `credit_card`
-- `fullname`
+- `email` keeps the domain, which can reveal an organization
+- `ipv4_addr` masks one octet by default and leaves the network prefix visible
+- `credit_card` keeps the BIN and the last 4 digits, the PCI display limit
+- `fullname` keeps initials and word lengths
+
+These shapes are intentional. Use full redaction when the leftover structure is still identifying. `mask.Register` adds a kind and refuses to replace one; `mask.Override` replaces it.
 
 ## Limitations
 1.  Only fields of types convertible to `string` or `*string` are supported, although nesting structs directly or through collections (slices and maps) is also supported. String slices (`[]string`, `[]*string`) are supported as data fields.
 
-2. Self-Referencing Types are supported, allowing types to include fields of the same type. However, Self-Referencing Values (instances that create a reference loop) are not supported.
+2. Self-referencing types are supported. A value that contains a pointer cycle returns an error. A chain of more than 10000 structs returns an error.
 

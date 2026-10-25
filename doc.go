@@ -30,7 +30,9 @@ Applying the default masking logic:
 		Role:     "Teacher",
 	}
 
-	_ = sensitive.Mask(&profile)
+	if err := sensitive.Mask(&profile); err != nil {
+		// The struct is fully redacted. err names the field path, not the value.
+	}
 
 	// After masking:
 	//
@@ -44,6 +46,7 @@ Applying the default masking logic:
 	// - The default behavior of the `email` mask is to hide the local part while revealing the domain part.
 	// - The library does not provide a default mask for `name`; therefore, the default redaction behavior is applied.
 	// - You may consider defining a specific `name` mask and registering it using [mask.Register].
+	//   Register does not replace a kind that is already registered; use [mask.Override] for that.
 	// - The Role field is not tagged as sensitive, so it remains unchanged.
 
 Applying a custom redact logic:
@@ -72,7 +75,9 @@ Applying a custom redact logic:
 		}
 	}
 
-	_ = sensitive.Redact(&profile, option)
+	if err := sensitive.Redact(&profile, option); err != nil {
+		// Handle err before logging profile.
+	}
 
 	// After redacting:
 	//

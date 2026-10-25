@@ -46,20 +46,35 @@ func (p TagPayload) String() string {
 	return p.Marshal()
 }
 
+// errBadTag marks a tag string that cannot be parsed.
+// Scan and Check wrap it with ErrInvalidTagConfiguration.
+var errBadTag = errors.New("invalid sensitive tag")
+
 // ParseTag searches for a sensitive tag in the given field's raw tag,
 // parses it, and returns a representational payload.
-// It returns nil if the tag is not found or is misconfigured.
-func ParseTag(rt reflect.StructTag) *TagPayload {
-	tag, tagID := extractTag(rt)
-	if tag == "" {
-		return nil
+// It returns nil, nil when the field has no sensitive tag.
+//
+// Option values are split on the first '=' and may contain '='.
+// A comma separates options and cannot appear inside a value.
+// data accepts kind. subjectID accepts prefix. dive accepts no options.
+// A field may carry only one of sensitive, pii, and sens.
+func ParseTag(rt reflect.StructTag) (*TagPayload, error) {
+	tag, tagID, err := extractTag(rt)
+	if err != nil {
+		return nil, err
 	}
-	name, opts := parseTag(tag)
+	if tag == "" {
+		return nil, nil
+	}
+	name, opts, err := parseTag(tag)
+	if err != nil {
+		return nil, err
+	}
 	return &TagPayload{
 		ID:      tagID,
 		Name:    name,
 		Options: opts,
-	}
+	}, nil
 }
 
 // MustFieldTag extracts and parses the `sensitive` tag of the specified field in the given struct.
@@ -82,8 +97,11 @@ func MustFieldTag(v any, field string) TagPayload {
 // FieldTag extracts and parses the `sensitive` tag of the specified field in the given struct.
 //
 // It returns an error if the value is neither a struct nor a pointer to a struct,
-// or if the field is not found. It returns an empty value if the `sensitive` tag is misconfigured.
+// if the field is not found, or if the sensitive tag is misconfigured.
 func FieldTag(v any, field string) (*TagPayload, error) {
+	if v == nil {
+		return nil, fmt.Errorf("%w '%v'", ErrUnsupportedType, nil)
+	}
 	rt := reflect.TypeOf(v)
 	if rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
@@ -98,7 +116,7 @@ func FieldTag(v any, field string) (*TagPayload, error) {
 		return nil, fmt.Errorf("field '%s' not found in the struct", field)
 	}
 
-	return ParseTag(f.Tag), nil
+	return ParseTag(f.Tag)
 }
 
 func marshalTag(payload TagPayload) string {
@@ -111,26 +129,46 @@ func marshalTag(payload TagPayload) string {
 	return str
 }
 
-func extractTag(rt reflect.StructTag) (tag, tagID string) {
+func extractTag(rt reflect.StructTag) (tag, tagID string, err error) {
 	for _, id := range tagIDs {
-		tag, tagID = rt.Get(id), id
-		if tag != "" {
-			return
+		v := rt.Get(id)
+		if v == "" {
+			continue
 		}
+		if tag != "" {
+			return "", "", fmt.Errorf("%w: multiple tag IDs", errBadTag)
+		}
+		tag, tagID = v, id
 	}
-	return
+	return tag, tagID, nil
 }
 
-func parseTag(tagStr string) (name string, opts TagOptions) {
+func allowedOption(name, key string) bool {
+	switch name {
+	case tagData:
+		return key == "kind"
+	case tagSubjectID:
+		return key == "prefix"
+	default:
+		return false
+	}
+}
+
+func parseTag(tagStr string) (name string, opts TagOptions, err error) {
 	parts := strings.Split(tagStr, ",")
 	name = strings.TrimSpace(parts[0])
-	opts = make(map[string]string)
+	opts = make(TagOptions)
 	for _, opt := range parts[1:] {
-		splits := strings.Split(opt, "=")
-		if len(splits) == 2 {
-			name, val := strings.TrimSpace(splits[0]), strings.TrimSpace(splits[1])
-			opts[name] = val
+		key, val, ok := strings.Cut(opt, "=")
+		if !ok {
+			return "", nil, fmt.Errorf("%w: option %q", errBadTag, strings.TrimSpace(opt))
 		}
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		if !allowedOption(name, key) {
+			return "", nil, fmt.Errorf("%w: option %q", errBadTag, key)
+		}
+		opts[key] = val
 	}
-	return
+	return name, opts, nil
 }

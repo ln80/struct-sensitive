@@ -33,6 +33,20 @@ func TestIPv4Addr(t *testing.T) {
 		},
 		{
 			Option: func(mc *mask.Config[mask.IPv4AddrConfig]) {
+				mc.Kind.OctetsToMask = 5
+			},
+			Value: "169.251.207.194",
+			OK:    false,
+		},
+		{
+			Option: func(mc *mask.Config[mask.IPv4AddrConfig]) {
+				mc.Kind.OctetsToMask = -1
+			},
+			Value: "169.251.207.194",
+			OK:    false,
+		},
+		{
+			Option: func(mc *mask.Config[mask.IPv4AddrConfig]) {
 				mc.Symbol = '0'
 				mc.Kind.OctetsToMask = 1
 				mc.Kind.OneOctetSymbol = true

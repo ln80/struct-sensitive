@@ -10,7 +10,8 @@ import (
 type FullNameConfig struct {
 }
 
-// FullName masks a full name by revealing only the first character of the first and last words.
+// FullName keeps the first letter of the first and last words and the length of every word.
+// Those leftovers can re-identify a person. Prefer full redaction when the name must not be recognizable.
 func FullName(name string, opts ...func(*Config[FullNameConfig])) (string, error) {
 	cfg := DefaultConfig(FullNameConfig{})
 	option.Apply(&cfg, opts)
@@ -36,5 +37,5 @@ func FullName(name string, opts ...func(*Config[FullNameConfig])) (string, error
 }
 
 func init() {
-	Register("fullname", DefaultMasker(FullName))
+	mustRegister("fullname", DefaultMasker(FullName))
 }

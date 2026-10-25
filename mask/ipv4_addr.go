@@ -13,11 +13,17 @@ type IPv4AddrConfig struct {
 	OneOctetSymbol bool // default false
 }
 
+// IPv4Addr masks the last octet by default and leaves the rest of the address visible.
+// The visible prefix can still locate a network. Raise OctetsToMask to hide more of it.
+// OctetsToMask must be from 0 through 4. Zero leaves the address unchanged.
 func IPv4Addr(ip string, opts ...func(*Config[IPv4AddrConfig])) (string, error) {
 	cfg := DefaultConfig(IPv4AddrConfig{
 		OctetsToMask: 1,
 	})
 	option.Apply(&cfg, opts)
+	if cfg.Kind.OctetsToMask < 0 || cfg.Kind.OctetsToMask > 4 {
+		return "", fmt.Errorf("octets to mask must be between 0 and 4")
+	}
 
 	parsedIP := net.ParseIP(ip)
 	if parsedIP == nil || strings.Contains(ip, ":") {
@@ -39,5 +45,5 @@ func IPv4Addr(ip string, opts ...func(*Config[IPv4AddrConfig])) (string, error) 
 }
 
 func init() {
-	Register("ipv4_addr", DefaultMasker(IPv4Addr))
+	mustRegister("ipv4_addr", DefaultMasker(IPv4Addr))
 }

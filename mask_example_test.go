@@ -51,7 +51,9 @@ func ExampleMask() {
 		return
 	}
 
-	mask.Register("be_nrn", mask.DefaultMasker(BeNRNMask))
+	if err := mask.Register("be_nrn", mask.DefaultMasker(BeNRNMask)); err != nil {
+		log.Fatal(err)
+	}
 
 	p := Profile{
 		Email:    "eric.prosacco@example.com",
@@ -70,6 +72,6 @@ func ExampleMask() {
 	// Profile{
 	//   Email: "*************@example.com",
 	//   NRN: "85.12.25-***-**",
-	//   Fullname: "*************",
+	//   Fullname: "***",
 	// }
 }

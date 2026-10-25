@@ -30,8 +30,8 @@ func ExampleRedact() {
 
 	// Output:
 	// Profile{
-	//   Email: "*************************",
-	//   Fullname: "*************",
+	//   Email: "***",
+	//   Fullname: "***",
 	//   Role: "Teacher",
 	// }
 }

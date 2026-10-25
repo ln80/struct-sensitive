@@ -11,6 +11,8 @@ type CreditCardConfig struct {
 	MaskBankIdentifier bool // default false
 }
 
+// CreditCard keeps the BIN and the last four digits, which is the PCI display limit.
+// The BIN identifies the issuing bank. Set MaskBankIdentifier to keep only the last group.
 func CreditCard(cardNumber string, opts ...func(*Config[CreditCardConfig])) (string, error) {
 	cfg := DefaultConfig(CreditCardConfig{
 		MaskBankIdentifier: false,
@@ -83,5 +85,5 @@ func CreditCard(cardNumber string, opts ...func(*Config[CreditCardConfig])) (str
 }
 
 func init() {
-	Register("credit_card", DefaultMasker(CreditCard))
+	mustRegister("credit_card", DefaultMasker(CreditCard))
 }

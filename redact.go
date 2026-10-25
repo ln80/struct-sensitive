@@ -2,7 +2,6 @@ package sensitive
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/ln80/struct-sensitive/internal/option"
 )
@@ -19,6 +18,9 @@ type RedactConfig struct {
 
 	// RedactFunc overrides the default redaction function `RedactDefaultFunc`.
 	RedactFunc ReplaceFunc
+
+	// fieldErrs collects per-field failures that were replaced with full redaction.
+	fieldErrs []error
 }
 
 // Redact redacts sensitive data from struct field values by replacing each character with '*'.
@@ -27,7 +29,8 @@ type RedactConfig struct {
 // or if the redact function is nil.
 //
 // Optionally, you can override the default redact function by passing a custom one.
-func Redact(structPtr any, opts ...func(*RedactConfig)) error {
+func Redact(structPtr any, opts ...func(*RedactConfig)) (err error) {
+	defer catchPanic(&err)
 	cfg := RedactConfig{
 		RedactFunc: RedactDefaultFunc,
 	}
@@ -46,9 +49,19 @@ func Redact(structPtr any, opts ...func(*RedactConfig)) error {
 		return nil
 	}
 
-	return accessor.Replace(cfg.RedactFunc)
+	if err = accessor.Replace(cfg.RedactFunc); err != nil {
+		return err
+	}
+	return errors.Join(cfg.fieldErrs...)
 }
 
+// Redacted is the fixed placeholder written by RedactDefaultFunc.
+// It does not preserve the length of the original value.
+const Redacted = "***"
+
 func RedactDefaultFunc(_ FieldReplace, val string) (string, error) {
-	return strings.Repeat("*", len(val)), nil
+	if val == "" {
+		return "", nil
+	}
+	return Redacted, nil
 }

@@ -34,12 +34,12 @@ func TestRedact(t *testing.T) {
 		},
 		{
 			val:  &Address{Street: "07024 Quigley Trace"},
-			want: &Address{Street: "*******************"},
+			want: &Address{Street: Redacted},
 			ok:   true,
 		},
 		{
 			val:  &Address{Street: "070 a"},
-			want: &Address{Street: "*****"},
+			want: &Address{Street: Redacted},
 			ok:   true,
 		},
 		func() tc {
@@ -81,8 +81,8 @@ func TestRedact(t *testing.T) {
 			},
 			want: &Profile{
 				ID:    "",
-				Email: "*************************",
-				Phone: ptr("************"),
+				Email: Redacted,
+				Phone: ptr(Redacted),
 			},
 			ok: true,
 		},
@@ -102,9 +102,9 @@ func TestRedact(t *testing.T) {
 				want: &T{
 					Profile: Profile{
 						ID:    "abc",
-						Email: "*****************",
+						Email: Redacted,
 					},
-					Address: &Address{Street: "*******************"},
+					Address: &Address{Street: Redacted},
 				},
 				ok: true,
 			}
@@ -135,7 +135,7 @@ func TestRedact(t *testing.T) {
 				},
 				want: &T{
 					Email:    "****@****.com",
-					Fullname: "**************",
+					Fullname: Redacted,
 				},
 				option: func(rc *RedactConfig) {
 					rc.RedactFunc = func(fr FieldReplace, val string) (string, error) {

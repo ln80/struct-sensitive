@@ -1,6 +1,17 @@
 package mask
 
-import "sync"
+import (
+	"errors"
+	"fmt"
+	"sync"
+)
+
+var (
+	// ErrNilMask is returned when a mask function is nil.
+	ErrNilMask = errors.New("nil mask")
+	// ErrMaskRegistered is returned when Register is asked to replace a kind.
+	ErrMaskRegistered = errors.New("mask already registered")
+)
 
 // Config is the generic mask config required by any registered mask.
 //
@@ -34,12 +45,39 @@ var (
 	maskMu       sync.RWMutex
 )
 
-// Register registers a default masker to handle a specific kind of sensitive data.
-func Register(kind string, m defaultMasker) {
+// Register adds a default masker for kind.
+// It rejects a nil function, an empty kind, and a kind that is already registered.
+// Use Override to replace a mask, including a predefined one.
+func Register(kind string, m defaultMasker) error {
+	return register(kind, m, false)
+}
+
+// Override sets the mask for kind, replacing one that is already registered.
+// It rejects a nil function and an empty kind.
+func Override(kind string, m defaultMasker) error {
+	return register(kind, m, true)
+}
+
+func register(kind string, m defaultMasker, override bool) error {
+	if m == nil {
+		return ErrNilMask
+	}
+	if kind == "" {
+		return errors.New("empty mask kind")
+	}
 	maskMu.Lock()
 	defer maskMu.Unlock()
-
+	if _, exists := maskRegistry[kind]; exists && !override {
+		return fmt.Errorf("%w: %s", ErrMaskRegistered, kind)
+	}
 	maskRegistry[kind] = m
+	return nil
+}
+
+func mustRegister(kind string, m defaultMasker) {
+	if err := Register(kind, m); err != nil {
+		panic(err)
+	}
 }
 
 // Of returns the specific default masker of the given kind.

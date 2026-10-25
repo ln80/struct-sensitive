@@ -1,10 +1,16 @@
 package sensitive
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/ln80/struct-sensitive/mask"
 )
 
 func TestMask(t *testing.T) {
@@ -49,7 +55,7 @@ func TestMask(t *testing.T) {
 			},
 			want: &Profile{
 				Email:    "*****@example.com",
-				Fullname: "********************",
+				Fullname: Redacted,
 				Devices: []Device{
 					{
 						IPAddr: "169.251.207.***",
@@ -76,9 +82,9 @@ func TestMask(t *testing.T) {
 				want: &Profile2{
 					Profile: Profile{
 						Email:    "*****@example.com",
-						Fullname: "********************",
+						Fullname: Redacted,
 					},
-					InsuranceNumber: "*************",
+					InsuranceNumber: Redacted,
 				},
 				ok: true,
 			}
@@ -170,5 +176,116 @@ func TestMaskedCopy_PointerFields(t *testing.T) {
 	}
 	if *masked.Phone == "519-491-6780" {
 		t.Fatal("Value().Phone should be masked")
+	}
+}
+
+func TestMaskContinuesAfterMaskError(t *testing.T) {
+	if err := mask.Register("fail_closed", func(string) (string, error) {
+		return "", errors.New("invalid email format")
+	}); err != nil {
+		t.Fatalf("Register() err = %v", err)
+	}
+	type row struct {
+		Email string `sensitive:"data,kind=fail_closed"`
+		Name  string `sensitive:"data"`
+	}
+	in := &row{Email: "alice.example.com", Name: "Alice Doe"}
+	err := Mask(in)
+	if err == nil {
+		t.Fatal("Mask() err = nil")
+	}
+	if strings.Contains(err.Error(), "alice.example.com") || strings.Contains(err.Error(), "Alice") {
+		t.Fatalf("error contains a value: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Email") {
+		t.Fatalf("error = %v, want the field path", err)
+	}
+	if in.Email != Redacted {
+		t.Fatalf("Email = %q", in.Email)
+	}
+	if in.Name != Redacted {
+		t.Fatalf("Name = %q", in.Name)
+	}
+}
+
+func TestNewMaskedCopyPreservesCaller(t *testing.T) {
+	email := "a@b.c"
+	in := struct {
+		Email  *string  `sensitive:"data,kind=email"`
+		Tags   []string `sensitive:"data"`
+		Secret []byte   `sensitive:"data"`
+		note   string
+	}{
+		Email:  &email,
+		Tags:   []string{"secret"},
+		Secret: []byte("secret"),
+		note:   "internal",
+	}
+	cp, err := NewMaskedCopy(in)
+	if err != nil {
+		t.Fatalf("NewMaskedCopy() err = %v", err)
+	}
+	if email != "a@b.c" || in.Tags[0] != "secret" || string(in.Secret) != "secret" {
+		t.Fatalf("caller changed: %+v email %q", in, email)
+	}
+	if got := cp.Reveal(); got.note != "internal" || *got.Email != "a@b.c" {
+		t.Fatalf("Reveal() = %+v", got)
+	}
+	masked := cp.Value()
+	if *masked.Email == "a@b.c" || masked.Tags[0] == "secret" || string(masked.Secret) == "secret" {
+		t.Fatalf("Value() was not masked: %+v", masked)
+	}
+
+	profile := &Profile{Email: "a@b.c", Fullname: "Ann"}
+	pcopy, err := NewMaskedCopy(profile)
+	if err != nil {
+		t.Fatalf("NewMaskedCopy(*Profile) err = %v", err)
+	}
+	if profile.Email != "a@b.c" {
+		t.Fatalf("pointer caller Email = %q", profile.Email)
+	}
+	if pcopy.Value().Email == "a@b.c" {
+		t.Fatal("pointer copy was not masked")
+	}
+	if pcopy.Reveal().Email != "a@b.c" {
+		t.Fatalf("pointer Reveal Email = %q", pcopy.Reveal().Email)
+	}
+}
+
+func TestMaskedHidesOriginal(t *testing.T) {
+	in := Profile{Email: "a@b.c", Fullname: "Ann"}
+	cp, err := NewMaskedCopy(in)
+	if err != nil {
+		t.Fatalf("NewMaskedCopy() err = %v", err)
+	}
+	if cp.Reveal().Email != "a@b.c" {
+		t.Fatalf("Reveal() Email = %q", cp.Reveal().Email)
+	}
+	masked := cp.Value()
+	if got := cp.String(); !strings.Contains(got, string(masked.Email)) || strings.Contains(got, "a@b.c") {
+		t.Fatalf("String() = %s", got)
+	}
+	if got := fmt.Sprintf("%#v", cp); strings.Contains(got, "a@b.c") || !strings.Contains(got, string(masked.Email)) {
+		t.Fatalf("GoString() = %s", got)
+	}
+	if got := fmt.Sprint(cp.LogValue()); strings.Contains(got, "a@b.c") {
+		t.Fatalf("LogValue() = %s", got)
+	}
+	if cp.LogValue().Kind() != slog.KindAny {
+		t.Fatalf("LogValue kind = %v", cp.LogValue().Kind())
+	}
+	raw, err := json.Marshal(cp)
+	if err != nil {
+		t.Fatalf("MarshalJSON() err = %v", err)
+	}
+	if strings.Contains(string(raw), "a@b.c") || !strings.Contains(string(raw), string(masked.Email)) {
+		t.Fatalf("MarshalJSON() = %s", raw)
+	}
+	text, err := cp.MarshalText()
+	if err != nil {
+		t.Fatalf("MarshalText() err = %v", err)
+	}
+	if strings.Contains(string(text), "a@b.c") || !strings.Contains(string(text), string(masked.Email)) {
+		t.Fatalf("MarshalText() = %s", text)
 	}
 }

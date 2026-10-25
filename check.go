@@ -11,11 +11,16 @@ import (
 // is not a struct or a pointer to a struct.
 func Check(v any) (found bool, err error) {
 	defer func() {
+		catchPanic(&err)
 		// normalize error
 		if err != nil && !errors.Is(err, ErrUnsupportedType) {
 			err = errors.Join(ErrInvalidTagConfiguration, err)
 		}
 	}()
+	if v == nil {
+		err = fmt.Errorf("%w '%v'", ErrUnsupportedType, nil)
+		return
+	}
 	t := reflect.TypeOf(v)
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()

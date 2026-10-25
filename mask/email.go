@@ -13,6 +13,9 @@ type EmailConfig struct {
 	KeepFirstAndLastChar bool // default false
 }
 
+// Email masks the local part and leaves the domain visible.
+// The domain can re-identify the person, for example a hospital or employer.
+// Set MaskDomain to hide it. Mask keeps the '@' and the dots in the domain.
 func Email(email string, opts ...func(*Config[EmailConfig])) (string, error) {
 	cfg := DefaultConfig(EmailConfig{
 		MaskDomain: false,
@@ -55,5 +58,5 @@ func Email(email string, opts ...func(*Config[EmailConfig])) (string, error) {
 }
 
 func init() {
-	Register("email", DefaultMasker(Email))
+	mustRegister("email", DefaultMasker(Email))
 }
