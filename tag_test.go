@@ -119,6 +119,12 @@ func TestParseTagRejectsBadOptions(t *testing.T) {
 			}{},
 		},
 		{
+			name: "replace on subject",
+			val: struct {
+				ID string `sensitive:"subjectID,replace=x"`
+			}{},
+		},
+		{
 			name: "option without value",
 			val: struct {
 				Email string `sensitive:"data,kind"`
@@ -148,5 +154,16 @@ func TestParseTagRejectsBadOptions(t *testing.T) {
 	}
 	if payload.Options["prefix"] != "a=b" {
 		t.Fatalf("prefix = %q", payload.Options["prefix"])
+	}
+}
+
+func TestParseTagAcceptsReplaceOnData(t *testing.T) {
+	raw := reflect.StructTag(`pii:"data,kind=email,replace=deleted pii"`)
+	payload, err := ParseTag(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := payload.Options.Get("replace"); got != "deleted pii" {
+		t.Fatalf("replace = %q", got)
 	}
 }

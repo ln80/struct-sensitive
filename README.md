@@ -59,7 +59,7 @@ if err := sensitive.Mask(&profile); err != nil {
 
 ### Tags basic usage:
 
-- `sensitive:data` indicates that the field contains sensitive data and may also specify its kind (optional).
+- `sensitive:data` indicates that the field contains sensitive data and may also specify its kind (optional). `replace=<value>` is passed to callers in `FieldReplace.Options`: the value to write when the field can no longer be read (privacy-engine uses it for a forgotten subject). Other options are rejected.
 
 - `sensitive:dive` specifies that the nested struct or the collection of structs contains sensitive fields.
 

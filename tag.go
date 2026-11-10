@@ -56,7 +56,9 @@ var errBadTag = errors.New("invalid sensitive tag")
 //
 // Option values are split on the first '=' and may contain '='.
 // A comma separates options and cannot appear inside a value.
-// data accepts kind. subjectID accepts prefix. dive accepts no options.
+// data accepts kind and replace. subjectID accepts prefix. dive accepts no
+// options. replace is not used here: it is the value a caller writes when the
+// field can no longer be read, such as privacy-engine for a forgotten subject.
 // A field may carry only one of sensitive, pii, and sens.
 func ParseTag(rt reflect.StructTag) (*TagPayload, error) {
 	tag, tagID, err := extractTag(rt)
@@ -146,7 +148,7 @@ func extractTag(rt reflect.StructTag) (tag, tagID string, err error) {
 func allowedOption(name, key string) bool {
 	switch name {
 	case tagData:
-		return key == "kind"
+		return key == "kind" || key == "replace"
 	case tagSubjectID:
 		return key == "prefix"
 	default:
