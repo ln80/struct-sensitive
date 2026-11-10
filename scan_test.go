@@ -620,6 +620,90 @@ func TestSubjectIDResolution(t *testing.T) {
 	}
 }
 
+func TestEmbeddedValueObjectIsNotSensitive(t *testing.T) {
+	type subscriptionID struct {
+		Account string
+		ID      string
+	}
+	type created struct {
+		subscriptionID
+		At int64
+	}
+
+	found, err := Check(created{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found {
+		t.Fatal("Check() found sensitive data on an event with no pii")
+	}
+	s, err := Scan(&created{subscriptionID: subscriptionID{Account: "a", ID: "default"}, At: 1}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.HasSensitive() {
+		t.Fatal("HasSensitive() = true")
+	}
+}
+
+func TestParentDataUsesEmbeddedSubject(t *testing.T) {
+	type ident struct {
+		ID string `sensitive:"subjectID"`
+	}
+	type ev struct {
+		ident
+		Email string `sensitive:"data"`
+	}
+	in := &ev{ident: ident{ID: "u1"}, Email: "a@b.c"}
+	s, err := Scan(in, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.SubjectID(); got != "u1" {
+		t.Fatalf("SubjectID() = %q", got)
+	}
+	var got string
+	if err := s.Replace(func(fr FieldReplace, _ string) (string, error) {
+		got = fr.SubjectID
+		return "x", nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got != "u1" || in.Email != "x" {
+		t.Fatalf("subject %q email %q", got, in.Email)
+	}
+}
+
+func TestEmbeddedSubjectStaysWithNestedData(t *testing.T) {
+	type author struct {
+		ID    string `sensitive:"subjectID"`
+		Email string `sensitive:"data"`
+	}
+	type ev struct {
+		ID string `sensitive:"subjectID"`
+		author
+		Payload string `sensitive:"data"`
+	}
+	in := &ev{ID: "secret", author: author{ID: "author", Email: "a@b.c"}, Payload: "body"}
+	s, err := Scan(in, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.SubjectID(); got != "secret" {
+		t.Fatalf("SubjectID() = %q", got)
+	}
+	got := map[string]string{}
+	if err := s.Replace(func(fr FieldReplace, val string) (string, error) {
+		got[val] = fr.SubjectID
+		return val, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got["body"] != "secret" || got["a@b.c"] != "author" {
+		t.Fatalf("subjects = %v", got)
+	}
+}
+
 func TestTaggedFieldsMustBeHandled(t *testing.T) {
 	type contact struct {
 		Email string `sensitive:"data"`

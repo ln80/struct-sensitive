@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+
+	"github.com/ln80/struct-sensitive/internal/option"
 )
 
 var (
@@ -37,7 +39,16 @@ type Struct interface {
 	// nested subject agrees. It is empty when nested subjects disagree, and
 	// panics when no subject can be resolved. Changing the struct after Scan
 	// does not change this result.
+	//
+	// Under [SingleSubject] it is the one subject of every data field. Under
+	// [MultipleSubjects] a nested struct's data may use another subject: read
+	// [FieldReplace.SubjectID] or [Struct.Subjects] instead.
 	SubjectID() string
+
+	// Subjects lists the distinct subjects used by the struct's current data
+	// fields, sorted. It reads the struct as it is now. A data field with a
+	// value but no subject is ErrSubjectIDNotFound.
+	Subjects() ([]string, error)
 
 	// HasSensitive indicates whether the struct contains sensitive data fields.
 	HasSensitive() bool
@@ -84,12 +95,50 @@ type FieldReplace struct {
 // and returns the new value as a string along with any error that may occur.
 type ReplaceFunc func(fr FieldReplace, val string) (string, error)
 
+// SubjectMode says how many subjects one scanned value may use.
+type SubjectMode int
+
+const (
+	// MultipleSubjects lets each struct that declares a subjectID own the data
+	// in it. The nearest declared subject wins: a struct's own subject, else
+	// the parent's. This is the default.
+	MultipleSubjects SubjectMode = iota
+
+	// SingleSubject requires every data field of the value to use one subject.
+	// Scan returns ErrMultipleSubjectID when the type declares more than one
+	// subjectID that governs data (on another nested or embedded struct, or in
+	// a recursive type), or when the values of one declaration differ, such as
+	// two slice elements with different subjects. A struct that declares a
+	// subjectID but carries no data does not count.
+	SingleSubject
+)
+
+// ScanConfig holds the configuration for [Scan].
+type ScanConfig struct {
+	// SubjectMode is [MultipleSubjects] by default.
+	SubjectMode SubjectMode
+}
+
+// WithSubjectMode sets the [SubjectMode] Scan enforces.
+func WithSubjectMode(m SubjectMode) func(*ScanConfig) {
+	return func(c *ScanConfig) {
+		c.SubjectMode = m
+	}
+}
+
 // Scan inspects the given value and returns an accessor for the sensitive struct.
 // It returns an error if the value is not a pointer to a struct or if the 'sensitive' tag is misconfigured.
+// With requireSubject, every data field with a value must resolve to a subject.
+// Options set the [SubjectMode]; see [WithSubjectMode].
 //
 // The [Struct] accessor and the [Scan] function are low-level components.
 // In most cases, you should consider using the [Redact] or [Mask] functions instead.
-func Scan(v any, requireSubject bool) (accessor Struct, err error) {
+func Scan(v any, requireSubject bool, opts ...func(*ScanConfig)) (accessor Struct, err error) {
+	var cfg ScanConfig
+	option.Apply(&cfg, opts)
+	if cfg.SubjectMode != MultipleSubjects && cfg.SubjectMode != SingleSubject {
+		return nil, fmt.Errorf("%w: unknown subject mode %d", ErrInvalidTagConfiguration, cfg.SubjectMode)
+	}
 	defer func() {
 		catchPanic(&err)
 		// Tag and type failures share one sentinel. A bad record, a cycle,
@@ -150,6 +199,11 @@ func Scan(v any, requireSubject bool) (accessor Struct, err error) {
 
 	if requireSubject {
 		if err = ensureSubjects(ssType, structValue.val, "", false, newValueWalk()); err != nil {
+			return
+		}
+	}
+	if cfg.SubjectMode == SingleSubject {
+		if err = ensureSingleSubject(ssType, structValue); err != nil {
 			return
 		}
 	}
@@ -290,12 +344,15 @@ type sensitiveField struct {
 	sf                      reflect.StructField
 	isSub, isData, isNested bool
 	isDataSlice             bool
-	prefix                  string
-	isSlice, isMap          bool
-	nestedStructType        *sensitiveStructType
-	nestedStructTypeRef     reflect.Type
-	kind                    string
-	options                 TagOptions
+	// promoted marks a subject copied from an embedded struct onto its parent.
+	// It is the embedded struct's declaration, not a second one.
+	promoted            bool
+	prefix              string
+	isSlice, isMap      bool
+	nestedStructType    *sensitiveStructType
+	nestedStructTypeRef reflect.Type
+	kind                string
+	options             TagOptions
 }
 
 func (f sensitiveField) getType(cache map[reflect.Type]*sensitiveStructType) *sensitiveStructType {
@@ -667,6 +724,91 @@ func (ss sensitiveStruct) SubjectID() string {
 	return ss.subjectID
 }
 
+func (ss sensitiveStruct) Subjects() (subjects []string, err error) {
+	defer catchPanic(&err)
+	if !ss.typ.hasSensitive || !ss.val.IsValid() {
+		return nil, nil
+	}
+	seen := map[string]struct{}{}
+	missing := false
+	fn := func(fr FieldReplace, val string) (string, error) {
+		if fr.SubjectID == "" {
+			missing = true
+		} else {
+			seen[fr.SubjectID] = struct{}{}
+		}
+		return val, nil
+	}
+	// A plan with an unchanged value records no write.
+	if err = ss.collect(fn, "", &replacement{}, newValueWalk()); err != nil {
+		return nil, err
+	}
+	if missing {
+		return nil, fmt.Errorf("%w in '%v'", ErrSubjectIDNotFound, ss.typ.rt)
+	}
+	subjects = make([]string, 0, len(seen))
+	for s := range seen {
+		subjects = append(subjects, s)
+	}
+	sort.Strings(subjects)
+	return subjects, nil
+}
+
+// ensureSingleSubject enforces [SingleSubject]: one subjectID declaration
+// governs the type's data, and the current data uses one subject value.
+func ensureSingleSubject(t sensitiveStructType, ss sensitiveStruct) error {
+	if subjectDecls(t, map[reflect.Type]bool{}) > 1 {
+		return fmt.Errorf("%w in '%v': more than one struct declares a subjectID for data", ErrMultipleSubjectID, t.rt)
+	}
+	seen := map[string]struct{}{}
+	fn := func(fr FieldReplace, val string) (string, error) {
+		if fr.SubjectID != "" {
+			seen[fr.SubjectID] = struct{}{}
+		}
+		return val, nil
+	}
+	if err := ss.collect(fn, "", &replacement{}, newValueWalk()); err != nil {
+		return err
+	}
+	if len(seen) > 1 {
+		return fmt.Errorf("%w in '%v': data fields use %d subjects", ErrMultipleSubjectID, t.rt, len(seen))
+	}
+	return nil
+}
+
+// subjectDecls counts the subjectID declarations that govern data in t,
+// following nested structs that carry data. A promoted subject is the embedded
+// declaration and is counted there. A type met again inside its own subtree
+// repeats its subject, so it counts as two.
+func subjectDecls(t sensitiveStructType, stack map[reflect.Type]bool) int {
+	if !t.hasSensitive {
+		return 0
+	}
+	if stack[t.rt] {
+		if !t.subField.IsZero() {
+			return 2
+		}
+		return 0
+	}
+	stack[t.rt] = true
+	defer delete(stack, t.rt)
+	n := 0
+	if !t.subField.IsZero() && !t.subField.promoted {
+		n++
+	}
+	for _, f := range t.sensitiveFields {
+		if !f.isNested {
+			continue
+		}
+		nt, ok := nestedTypeOf(f)
+		if !ok {
+			continue
+		}
+		n += subjectDecls(nt, stack)
+	}
+	return n
+}
+
 func (ss sensitiveStruct) HasSensitive() bool {
 	return ss.typ.hasSensitive
 }
@@ -972,9 +1114,15 @@ func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type, path s
 			if !embeddedStruct(field) {
 				continue
 			}
+			// An untagged embed is walked so sensitive data inside it is not
+			// skipped. The embed is sensitive only when that walk finds data.
+			// A plain value object, such as an event id, stays ordinary.
 			ssField := sensitiveField{sf: field, isNested: true}
 			if err := attachDive(c, &ssField, &subjectField, field, path); err != nil {
 				return sensitiveStructType{}, err
+			}
+			if !nestedHasSensitive(c, ssField) {
+				continue
 			}
 			sensitiveFields = append(sensitiveFields, ssField)
 			continue
@@ -1026,11 +1174,32 @@ func scanStructTypeWithContext(c sensitiveStructContext, rt reflect.Type, path s
 	}
 
 	return sensitiveStructType{
-		hasSensitive:    len(sensitiveFields) > 0,
+		hasSensitive:    structHasSensitive(c, sensitiveFields),
 		subField:        subjectField,
 		sensitiveFields: sensitiveFields,
 		rt:              rt,
 	}, nil
+}
+
+// nestedHasSensitive reports whether a nested struct carries sensitive data.
+// A type still being scanned is read through the in-progress context.
+func nestedHasSensitive(c sensitiveStructContext, f sensitiveField) bool {
+	nt := f.nestedStructType
+	if f.nestedStructTypeRef != nil {
+		nt = c.seen[f.nestedStructTypeRef]
+	}
+	return nt != nil && nt.hasSensitive
+}
+
+// structHasSensitive is true when this struct has a sensitive data field or a
+// nested struct that does. A nested field with no sensitive data does not count.
+func structHasSensitive(c sensitiveStructContext, fields []sensitiveField) bool {
+	for _, f := range fields {
+		if f.isData || (f.isNested && nestedHasSensitive(c, f)) {
+			return true
+		}
+	}
+	return false
 }
 
 func attachDive(c sensitiveStructContext, ssField *sensitiveField, subjectField *sensitiveField, field reflect.StructField, path string) error {
@@ -1081,20 +1250,25 @@ func attachNested(c sensitiveStructContext, ssField *sensitiveField, tt reflect.
 }
 
 // promoteSubject copies an anonymous embedded struct's subjectID onto the parent
-// so the parent's own subject is the embedded field. A second subject on the
-// same struct is still ErrMultipleSubjectID.
+// when the parent has none, so the parent's own data uses that subject.
+// When the parent already has a subject, the embedded subject stays on the
+// nested struct. Two subjectID fields declared on the same struct are still
+// ErrMultipleSubjectID.
 func promoteSubject(subjectField *sensitiveField, field reflect.StructField, nested *sensitiveStructType) error {
 	if !field.Anonymous || nested == nil || nested.subField.IsZero() {
 		return nil
 	}
+	// The parent already has a subject. The embedded subject stays with the
+	// nested struct and is applied to that struct's own data.
 	if !subjectField.IsZero() {
-		return ErrMultipleSubjectID
+		return nil
 	}
 	promoted := nested.subField
 	idx := make([]int, 0, len(field.Index)+len(nested.subField.sf.Index))
 	idx = append(idx, field.Index...)
 	idx = append(idx, nested.subField.sf.Index...)
 	promoted.sf.Index = idx
+	promoted.promoted = true
 	*subjectField = promoted
 	return nil
 }

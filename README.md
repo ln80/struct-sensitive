@@ -63,7 +63,20 @@ if err := sensitive.Mask(&profile); err != nil {
 
 - `sensitive:dive` specifies that the nested struct or the collection of structs contains sensitive fields.
 
-- `sensitive:subjectID` marks the field value as the subject identifier to whom the sensitive data belongs. Only one subject ID value is authorized at the struct level when required.
+- `sensitive:subjectID` marks the field value as the subject identifier to whom the sensitive data belongs. One struct declares at most one. A nested or embedded struct may declare its own: its data then belongs to that subject, and data in a struct without one belongs to the parent's.
+
+### Subject modes
+
+`Scan` accepts a subject mode:
+
+- `MultipleSubjects` (default): each struct that declares a `subjectID` owns its data. The subject of each field is in `FieldReplace.SubjectID`, and `Struct.Subjects()` lists them all.
+- `SingleSubject`: every data field must use one subject. `Scan` returns `ErrMultipleSubjectID` when a second `subjectID` governs data anywhere in the type, or when the values of one declaration differ (two slice elements with different subjects). A struct that declares a `subjectID` but holds no data does not count.
+
+```go
+s, err := sensitive.Scan(&event, true, sensitive.WithSubjectMode(sensitive.SingleSubject))
+```
+
+Use `SingleSubject` when each record must be erasable with one key, as crypto-shredding with one key per record does.
 
 Example of registering a default mask for a particular sensitive data kind (e.g., 'be_nrn'):
 
