@@ -140,7 +140,7 @@ func TestParseTagRejectsBadOptions(t *testing.T) {
 			}
 			_, scanErr := Scan(&struct {
 				Email string `sensitive:"data,knd=email"`
-			}{Email: "a@b.c"}, false)
+			}{Email: "a@b.c"})
 			if tc.name == "unknown option" && !errors.Is(scanErr, ErrInvalidTagConfiguration) {
 				t.Fatalf("Scan() err = %v", scanErr)
 			}

@@ -113,31 +113,38 @@ const (
 	SingleSubject
 )
 
-// ScanConfig holds the configuration for [Scan].
-type ScanConfig struct {
-	// SubjectMode is [MultipleSubjects] by default.
-	SubjectMode SubjectMode
+// scanConfig is set by ScanOption.
+type scanConfig struct {
+	subjectMode    SubjectMode
+	requireSubject bool
 }
 
-// WithSubjectMode sets the [SubjectMode] Scan enforces.
-func WithSubjectMode(m SubjectMode) func(*ScanConfig) {
-	return func(c *ScanConfig) {
-		c.SubjectMode = m
-	}
+// ScanOption configures [Scan]. [WithSubjectMode] and [WithRequireSubject]
+// build them.
+type ScanOption func(*scanConfig)
+
+// WithSubjectMode sets the [SubjectMode] Scan enforces ([MultipleSubjects]
+// by default).
+func WithSubjectMode(m SubjectMode) ScanOption {
+	return func(c *scanConfig) { c.subjectMode = m }
+}
+
+// WithRequireSubject makes Scan fail with [ErrSubjectIDNotFound] unless every
+// data field with a value resolves to a subject.
+func WithRequireSubject() ScanOption {
+	return func(c *scanConfig) { c.requireSubject = true }
 }
 
 // Scan inspects the given value and returns an accessor for the sensitive struct.
 // It returns an error if the value is not a pointer to a struct or if the 'sensitive' tag is misconfigured.
-// With requireSubject, every data field with a value must resolve to a subject.
-// Options set the [SubjectMode]; see [WithSubjectMode].
 //
 // The [Struct] accessor and the [Scan] function are low-level components.
 // In most cases, you should consider using the [Redact] or [Mask] functions instead.
-func Scan(v any, requireSubject bool, opts ...func(*ScanConfig)) (accessor Struct, err error) {
-	var cfg ScanConfig
+func Scan(v any, opts ...ScanOption) (accessor Struct, err error) {
+	var cfg scanConfig
 	option.Apply(&cfg, opts)
-	if cfg.SubjectMode != MultipleSubjects && cfg.SubjectMode != SingleSubject {
-		return nil, fmt.Errorf("%w: unknown subject mode %d", ErrInvalidTagConfiguration, cfg.SubjectMode)
+	if cfg.subjectMode != MultipleSubjects && cfg.subjectMode != SingleSubject {
+		return nil, fmt.Errorf("%w: unknown subject mode %d", ErrInvalidTagConfiguration, cfg.subjectMode)
 	}
 	defer func() {
 		catchPanic(&err)
@@ -197,12 +204,12 @@ func Scan(v any, requireSubject bool, opts ...func(*ScanConfig)) (accessor Struc
 		structValue.hasSubject = true
 	}
 
-	if requireSubject {
+	if cfg.requireSubject {
 		if err = ensureSubjects(ssType, structValue.val, "", false, newValueWalk()); err != nil {
 			return
 		}
 	}
-	if cfg.SubjectMode == SingleSubject {
+	if cfg.subjectMode == SingleSubject {
 		if err = ensureSingleSubject(ssType, structValue); err != nil {
 			return
 		}

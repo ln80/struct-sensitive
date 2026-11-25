@@ -63,17 +63,15 @@ Applying a custom redact logic:
 		Role:     "Teacher",
 	}
 
-	option := func(rc *sensitive.RedactConfig) {
-		rc.RedactFunc = func(fr sensitive.FieldReplace, val string) (string, error) {
-			switch fr.Kind {
-			case "email":
-				return "ghost@unknown.net", nil
-			case "name":
-				return "Ghost", nil
-			}
-			return strings.Repeat("*", len(val)), nil
+	option := sensitive.WithRedactFunc(func(fr sensitive.FieldReplace, val string) (string, error) {
+		switch fr.Kind {
+		case "email":
+			return "ghost@unknown.net", nil
+		case "name":
+			return "Ghost", nil
 		}
-	}
+		return strings.Repeat("*", len(val)), nil
+	})
 
 	if err := sensitive.Redact(&profile, option); err != nil {
 		// Handle err before logging profile.

@@ -73,7 +73,7 @@ if err := sensitive.Mask(&profile); err != nil {
 - `SingleSubject`: every data field must use one subject. `Scan` returns `ErrMultipleSubjectID` when a second `subjectID` governs data anywhere in the type, or when the values of one declaration differ (two slice elements with different subjects). A struct that declares a `subjectID` but holds no data does not count.
 
 ```go
-s, err := sensitive.Scan(&event, true, sensitive.WithSubjectMode(sensitive.SingleSubject))
+s, err := sensitive.Scan(&event, sensitive.WithRequireSubject(), sensitive.WithSubjectMode(sensitive.SingleSubject))
 ```
 
 Use `SingleSubject` when each record must be erasable with one key, as crypto-shredding with one key per record does.

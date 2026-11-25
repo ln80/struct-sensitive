@@ -11,7 +11,7 @@ func TestRedact(t *testing.T) {
 	type tc struct {
 		val    any
 		want   any
-		option func(*RedactConfig)
+		option RedactOption
 		ok     bool
 		err    error
 	}
@@ -46,11 +46,9 @@ func TestRedact(t *testing.T) {
 			testErr := errors.New("test replace error")
 			return tc{
 				val: &Address{Street: "070 a"},
-				option: func(rc *RedactConfig) {
-					rc.RedactFunc = func(fr FieldReplace, val string) (string, error) {
-						return "", testErr
-					}
-				},
+				option: WithRedactFunc(func(fr FieldReplace, val string) (string, error) {
+					return "", testErr
+				}),
 				ok:  false,
 				err: testErr,
 			}
@@ -58,21 +56,16 @@ func TestRedact(t *testing.T) {
 		{
 			val:  &Address{Street: "070 a"},
 			want: &Address{Street: "*"},
-			option: func(rc *RedactConfig) {
-				rc.RedactFunc = func(fr FieldReplace, val string) (string, error) {
-					return "*", nil
-				}
-			},
+			option: WithRedactFunc(func(fr FieldReplace, val string) (string, error) {
+				return "*", nil
+			}),
 			ok: true,
 		},
 		{
-			val:  &Address{Street: "070 a"},
-			want: &Address{Street: "*"},
-			option: func(rc *RedactConfig) {
-				rc.RedactFunc = nil
-			},
-			ok:  false,
-			err: ErrRedactFuncNotFound,
+			val:    &Address{Street: "070 a"},
+			want:   &Address{Street: Redacted},
+			option: WithRedactFunc(nil),
+			ok:     true,
 		},
 		{
 			val: &Profile{
@@ -137,16 +130,14 @@ func TestRedact(t *testing.T) {
 					Email:    "****@****.com",
 					Fullname: Redacted,
 				},
-				option: func(rc *RedactConfig) {
-					rc.RedactFunc = func(fr FieldReplace, val string) (string, error) {
-						switch {
-						case fr.RType == reflect.TypeOf(Email("")):
-							return "****@****.com", nil
-						default:
-							return RedactDefaultFunc(fr, val)
-						}
+				option: WithRedactFunc(func(fr FieldReplace, val string) (string, error) {
+					switch {
+					case fr.RType == reflect.TypeOf(Email("")):
+						return "****@****.com", nil
+					default:
+						return RedactDefaultFunc(fr, val)
 					}
-				},
+				}),
 				ok: true,
 			}
 		}(),

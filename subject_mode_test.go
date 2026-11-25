@@ -75,7 +75,7 @@ type modePromoted struct {
 	Email string `sensitive:"data"`
 }
 
-func single() func(*ScanConfig) { return WithSubjectMode(SingleSubject) }
+func single() ScanOption { return WithSubjectMode(SingleSubject) }
 
 func subjectsOf(t *testing.T, s Struct) map[string]string {
 	t.Helper()
@@ -91,7 +91,7 @@ func subjectsOf(t *testing.T, s Struct) map[string]string {
 
 func TestSubjectModeDefaultIsMultiple(t *testing.T) {
 	in := &modeSecretEvent{ID: "secret", modeAuthor: modeAuthor{Subject: "author", Email: "a@b.c"}, Payload: "body"}
-	s, err := Scan(in, true)
+	s, err := Scan(in, WithRequireSubject())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestSingleSubjectRejectsSecondDeclaration(t *testing.T) {
 	// Rejected on the type, even when both subjects hold the same value.
 	for _, author := range []string{"author", "secret"} {
 		in := &modeSecretEvent{ID: "secret", modeAuthor: modeAuthor{Subject: author, Email: "a@b.c"}, Payload: "body"}
-		_, err := Scan(in, true, single())
+		_, err := Scan(in, WithRequireSubject(),  single())
 		if !errors.Is(err, ErrMultipleSubjectID) {
 			t.Fatalf("author %q: err = %v, want ErrMultipleSubjectID", author, err)
 		}
@@ -124,7 +124,7 @@ func TestSingleSubjectRejectsSecondDeclaration(t *testing.T) {
 
 func TestSingleSubjectIgnoresSubjectWithoutData(t *testing.T) {
 	in := &modeTokenEvent{ID: "secret", modeTokenOnly: modeTokenOnly{Subject: "author", Token: "tok"}, Payload: "body"}
-	s, err := Scan(in, true, single())
+	s, err := Scan(in, WithRequireSubject(),  single())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestSingleSubjectIgnoresSubjectWithoutData(t *testing.T) {
 
 func TestSingleSubjectNestedOwnerAndInheritedDetails(t *testing.T) {
 	in := &modeViewEvent{Secret: "s1", Viewer: modeViewer{Subject: "viewer", Email: "v@x.io"}, Details: modeDevice{IP: "9.9.9.9"}}
-	s, err := Scan(in, true, single())
+	s, err := Scan(in, WithRequireSubject(),  single())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestSingleSubjectNestedOwnerAndInheritedDetails(t *testing.T) {
 }
 
 func TestSingleSubjectPromotedEmbedIsOneDeclaration(t *testing.T) {
-	s, err := Scan(&modePromoted{modeIdent: modeIdent{ID: "u1"}, Email: "a@b.c"}, true, single())
+	s, err := Scan(&modePromoted{modeIdent: modeIdent{ID: "u1"}, Email: "a@b.c"}, WithRequireSubject(),  single())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestSingleSubjectPromotedEmbedIsOneDeclaration(t *testing.T) {
 
 func TestSingleSubjectSliceElementsMustAgree(t *testing.T) {
 	same := &modeGroup{Members: []modeMember{{ID: "u1", Email: "a@x"}, {ID: "u1", Email: "b@x"}}}
-	s, err := Scan(same, true, single())
+	s, err := Scan(same, WithRequireSubject(),  single())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,11 +172,11 @@ func TestSingleSubjectSliceElementsMustAgree(t *testing.T) {
 	}
 
 	differ := &modeGroup{Members: []modeMember{{ID: "u1", Email: "a@x"}, {ID: "u2", Email: "b@x"}}}
-	if _, err := Scan(differ, true, single()); !errors.Is(err, ErrMultipleSubjectID) {
+	if _, err := Scan(differ, WithRequireSubject(),  single()); !errors.Is(err, ErrMultipleSubjectID) {
 		t.Fatalf("err = %v, want ErrMultipleSubjectID", err)
 	}
 	// The default mode keeps each element's own subject.
-	s, err = Scan(differ, true)
+	s, err = Scan(differ, WithRequireSubject())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,16 +187,16 @@ func TestSingleSubjectSliceElementsMustAgree(t *testing.T) {
 
 func TestSingleSubjectRejectsRecursiveSubjects(t *testing.T) {
 	in := &modeNode{ID: "u1", Email: "a@x", Children: []modeNode{{ID: "u1", Email: "b@x"}}}
-	if _, err := Scan(in, true, single()); !errors.Is(err, ErrMultipleSubjectID) {
+	if _, err := Scan(in, WithRequireSubject(),  single()); !errors.Is(err, ErrMultipleSubjectID) {
 		t.Fatalf("err = %v, want ErrMultipleSubjectID", err)
 	}
-	if _, err := Scan(in, true); err != nil {
+	if _, err := Scan(in, WithRequireSubject()); err != nil {
 		t.Fatalf("default mode: %v", err)
 	}
 }
 
 func TestSubjectsReportsMissingSubject(t *testing.T) {
-	s, err := Scan(&modeViewEvent{Details: modeDevice{IP: "1.2.3.4"}}, false)
+	s, err := Scan(&modeViewEvent{Details: modeDevice{IP: "1.2.3.4"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestSubjectsReportsMissingSubject(t *testing.T) {
 
 func TestSubjectsWithoutSensitiveData(t *testing.T) {
 	type plain struct{ Name string }
-	s, err := Scan(&plain{Name: "x"}, false, single())
+	s, err := Scan(&plain{Name: "x"},  single())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestSubjectsWithoutSensitiveData(t *testing.T) {
 }
 
 func TestUnknownSubjectMode(t *testing.T) {
-	_, err := Scan(&modePromoted{}, false, WithSubjectMode(SubjectMode(7)))
+	_, err := Scan(&modePromoted{},  WithSubjectMode(SubjectMode(7)))
 	if !errors.Is(err, ErrInvalidTagConfiguration) {
 		t.Fatalf("err = %v", err)
 	}

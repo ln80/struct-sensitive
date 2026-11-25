@@ -493,7 +493,7 @@ func TestScan(t *testing.T) {
 
 	for i, tc := range tcs {
 		t.Run("tc: "+strconv.Itoa(i+1), func(t *testing.T) {
-			s, err := Scan(tc.val, true)
+			s, err := Scan(tc.val, WithRequireSubject())
 			if !tc.ok {
 				if !errors.Is(err, tc.err) {
 					t.Fatalf("expect err is %v, got %v", tc.err, err)
@@ -592,7 +592,7 @@ func TestSubjectIDResolution(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			s, err := Scan(tc.val, true)
+			s, err := Scan(tc.val, WithRequireSubject())
 			if tc.wantErr != nil {
 				if !errors.Is(err, tc.wantErr) {
 					t.Fatalf("Scan() err = %v, want %v", err, tc.wantErr)
@@ -637,7 +637,7 @@ func TestEmbeddedValueObjectIsNotSensitive(t *testing.T) {
 	if found {
 		t.Fatal("Check() found sensitive data on an event with no pii")
 	}
-	s, err := Scan(&created{subscriptionID: subscriptionID{Account: "a", ID: "default"}, At: 1}, true)
+	s, err := Scan(&created{subscriptionID: subscriptionID{Account: "a", ID: "default"}, At: 1}, WithRequireSubject())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -655,7 +655,7 @@ func TestParentDataUsesEmbeddedSubject(t *testing.T) {
 		Email string `sensitive:"data"`
 	}
 	in := &ev{ident: ident{ID: "u1"}, Email: "a@b.c"}
-	s, err := Scan(in, true)
+	s, err := Scan(in, WithRequireSubject())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -685,7 +685,7 @@ func TestEmbeddedSubjectStaysWithNestedData(t *testing.T) {
 		Payload string `sensitive:"data"`
 	}
 	in := &ev{ID: "secret", author: author{ID: "author", Email: "a@b.c"}, Payload: "body"}
-	s, err := Scan(in, true)
+	s, err := Scan(in, WithRequireSubject())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -743,7 +743,7 @@ func TestTaggedFieldsMustBeHandled(t *testing.T) {
 
 	t.Run("embedded", func(t *testing.T) {
 		in := &withEmbed{ID: "u1", contact: contact{Email: "a@b.c"}}
-		s, err := Scan(in, true)
+		s, err := Scan(in, WithRequireSubject())
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
@@ -757,7 +757,7 @@ func TestTaggedFieldsMustBeHandled(t *testing.T) {
 
 	t.Run("byte slices", func(t *testing.T) {
 		in := &withBytes{ID: "u1", Parts: [][]byte{[]byte("a"), []byte("b")}}
-		s, err := Scan(in, true)
+		s, err := Scan(in, WithRequireSubject())
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
@@ -784,7 +784,7 @@ func TestTaggedFieldsMustBeHandled(t *testing.T) {
 	}
 	for _, tc := range errCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Scan(tc.val, true)
+			_, err := Scan(tc.val, WithRequireSubject())
 			if !errors.Is(err, ErrUnsupportedFieldType) {
 				t.Fatalf("Scan() err = %v, want %v", err, ErrUnsupportedFieldType)
 			}
@@ -821,7 +821,7 @@ func TestPerElementSubject(t *testing.T) {
 
 	t.Run("slice", func(t *testing.T) {
 		in := &group{Members: []member{{ID: "u1", Email: "a@b.c"}, {ID: "u2", Email: "c@d.e"}}}
-		s, err := Scan(in, true)
+		s, err := Scan(in, WithRequireSubject())
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
@@ -846,7 +846,7 @@ func TestPerElementSubject(t *testing.T) {
 			"b": {ID: "u2", Email: "c@d.e"},
 		}}
 		subjects := func() map[string]string {
-			s, err := Scan(in, true)
+			s, err := Scan(in, WithRequireSubject())
 			if err != nil {
 				t.Fatalf("Scan() err = %v", err)
 			}
@@ -868,7 +868,7 @@ func TestPerElementSubject(t *testing.T) {
 
 	t.Run("inherit parent", func(t *testing.T) {
 		in := &parent{ID: "u1", Kid: kid{Email: "a@b.c"}}
-		s, err := Scan(in, true)
+		s, err := Scan(in, WithRequireSubject())
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
@@ -886,7 +886,7 @@ func TestPerElementSubject(t *testing.T) {
 
 	t.Run("root data uses nested subject", func(t *testing.T) {
 		in := &event{Note: "hello", Viewer: viewer{ID: "u1", Email: "a@b.c"}}
-		s, err := Scan(in, true)
+		s, err := Scan(in, WithRequireSubject())
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
@@ -926,7 +926,7 @@ func TestNilAndUnsupportedDoNotPanic(t *testing.T) {
 	t.Run("nil pointer element", func(t *testing.T) {
 		m := &member{ID: "u1", Email: "a@b.c"}
 		in := &ptrGroup{Members: []*member{m, nil}}
-		s, err := Scan(in, true)
+		s, err := Scan(in, WithRequireSubject())
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
@@ -941,7 +941,7 @@ func TestNilAndUnsupportedDoNotPanic(t *testing.T) {
 	t.Run("nil string element", func(t *testing.T) {
 		name := "ann"
 		in := &names{ID: "u1", Names: []*string{&name, nil}}
-		s, err := Scan(in, true)
+		s, err := Scan(in, WithRequireSubject())
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
@@ -954,7 +954,7 @@ func TestNilAndUnsupportedDoNotPanic(t *testing.T) {
 	})
 
 	t.Run("dive any", func(t *testing.T) {
-		_, err := Scan(&badDive{ID: "u1", Payload: "x"}, true)
+		_, err := Scan(&badDive{ID: "u1", Payload: "x"}, WithRequireSubject())
 		if !errors.Is(err, ErrUnsupportedFieldType) {
 			t.Fatalf("Scan() err = %v, want %v", err, ErrUnsupportedFieldType)
 		}
@@ -978,7 +978,7 @@ func TestNilAndUnsupportedDoNotPanic(t *testing.T) {
 		_, err := Scan(&struct {
 			ID   string `sensitive:"subjectID"`
 			Name string `sensitive:"dive"`
-		}{ID: "u1", Name: "ann"}, true)
+		}{ID: "u1", Name: "ann"}, WithRequireSubject())
 		if !errors.Is(err, ErrUnsupportedFieldType) {
 			t.Fatalf("Scan() err = %v, want %v", err, ErrUnsupportedFieldType)
 		}
@@ -988,7 +988,7 @@ func TestNilAndUnsupportedDoNotPanic(t *testing.T) {
 		_, err := Scan(&struct {
 			ID      string    `sensitive:"subjectID"`
 			Members [2]member `sensitive:"dive"`
-		}{}, true)
+		}{}, WithRequireSubject())
 		if !errors.Is(err, ErrUnsupportedFieldType) {
 			t.Fatalf("Scan() err = %v, want %v", err, ErrUnsupportedFieldType)
 		}
@@ -998,7 +998,7 @@ func TestNilAndUnsupportedDoNotPanic(t *testing.T) {
 		_, err := Scan(&struct {
 			ID      string              `sensitive:"subjectID"`
 			Members map[string][]member `sensitive:"dive"`
-		}{}, true)
+		}{}, WithRequireSubject())
 		if !errors.Is(err, ErrUnsupportedFieldType) {
 			t.Fatalf("Scan() err = %v, want %v", err, ErrUnsupportedFieldType)
 		}
@@ -1013,10 +1013,10 @@ func TestFailedScanDoesNotPoisonCache(t *testing.T) {
 		Inner poisonInner `sensitive:"dive"`
 	}
 
-	if _, err := Scan(&poisonOuter{}, false); err == nil {
+	if _, err := Scan(&poisonOuter{}); err == nil {
 		t.Fatal("Scan(outer) err = nil, want tag error")
 	}
-	if _, err := Scan(&poisonInner{Email: "a@b.c"}, false); err == nil {
+	if _, err := Scan(&poisonInner{Email: "a@b.c"}); err == nil {
 		t.Fatal("Scan(inner) err = nil, want tag error")
 	}
 	found, err := Check(poisonInner{Email: "a@b.c"})
@@ -1046,7 +1046,7 @@ func TestFieldReplacePath(t *testing.T) {
 	}
 	paths := func() map[string]string {
 		t.Helper()
-		s, err := Scan(in, false)
+		s, err := Scan(in)
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
@@ -1083,7 +1083,7 @@ func TestFieldReplaceOptionsAreIsolated(t *testing.T) {
 	}
 	replace := func(in *row) string {
 		t.Helper()
-		s, err := Scan(in, false)
+		s, err := Scan(in)
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
@@ -1113,7 +1113,7 @@ func TestReplaceLeavesValueUnchangedOnError(t *testing.T) {
 		Secret []byte `sensitive:"data"`
 	}
 	in := &row{ID: "u1", Email: "a@b.c", Name: "Ann", Secret: []byte("secret")}
-	s, err := Scan(in, true)
+	s, err := Scan(in, WithRequireSubject())
 	if err != nil {
 		t.Fatalf("Scan() err = %v", err)
 	}
@@ -1133,7 +1133,7 @@ func TestReplaceLeavesValueUnchangedOnError(t *testing.T) {
 	}
 
 	fresh := &row{ID: "u1", Email: "a@b.c", Name: "Ann", Secret: []byte("secret")}
-	s, err = Scan(fresh, true)
+	s, err = Scan(fresh, WithRequireSubject())
 	if err != nil {
 		t.Fatalf("Scan() err = %v", err)
 	}
@@ -1162,7 +1162,7 @@ func TestValueCycle(t *testing.T) {
 	}
 	loop := &node{ID: "u1", Secret: "x"}
 	loop.Next = loop
-	if _, err := Scan(loop, false); !errors.Is(err, ErrCycle) {
+	if _, err := Scan(loop); !errors.Is(err, ErrCycle) {
 		t.Fatalf("Scan() err = %v, want %v", err, ErrCycle)
 	}
 	if errors.Is(errCycle(loop), ErrInvalidTagConfiguration) {
@@ -1172,7 +1172,7 @@ func TestValueCycle(t *testing.T) {
 	a := &node{ID: "u1", Secret: "x"}
 	b := &node{ID: "u2", Secret: "y"}
 	a.Next = b
-	s, err := Scan(a, false)
+	s, err := Scan(a)
 	if err != nil {
 		t.Fatalf("Scan() err = %v", err)
 	}
@@ -1188,7 +1188,7 @@ func TestValueCycle(t *testing.T) {
 }
 
 func errCycle(v any) error {
-	_, err := Scan(v, false)
+	_, err := Scan(v)
 	return err
 }
 
@@ -1203,7 +1203,7 @@ func TestWalkDepthIsBounded(t *testing.T) {
 		cur.Next = &node{Secret: "x"}
 		cur = cur.Next
 	}
-	if _, err := Scan(head, false); !errors.Is(err, ErrMaxDepth) {
+	if _, err := Scan(head); !errors.Is(err, ErrMaxDepth) {
 		t.Fatalf("Scan() err = %v, want %v", err, ErrMaxDepth)
 	}
 }
@@ -1212,7 +1212,7 @@ func TestMissingSubjectIsNotTagConfiguration(t *testing.T) {
 	type row struct {
 		Email string `sensitive:"data"`
 	}
-	_, err := Scan(&row{Email: "a@b.c"}, true)
+	_, err := Scan(&row{Email: "a@b.c"}, WithRequireSubject())
 	if !errors.Is(err, ErrSubjectIDNotFound) {
 		t.Fatalf("Scan() err = %v, want %v", err, ErrSubjectIDNotFound)
 	}
@@ -1227,7 +1227,7 @@ func TestSubjectIDDoesNotReresolve(t *testing.T) {
 		Email string `sensitive:"data"`
 	}
 	in := &row{ID: "u1", Email: "a@b.c"}
-	s, err := Scan(in, false)
+	s, err := Scan(in)
 	if err != nil {
 		t.Fatalf("Scan() err = %v", err)
 	}
@@ -1241,7 +1241,7 @@ func TestSubjectIDDoesNotReresolve(t *testing.T) {
 		Next   *node  `sensitive:"dive"`
 	}
 	n := &node{Secret: "x"}
-	s, err = Scan(n, false)
+	s, err = Scan(n)
 	if err != nil {
 		t.Fatalf("Scan() err = %v", err)
 	}
