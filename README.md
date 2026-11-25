@@ -3,7 +3,6 @@
 
 struct-sensitive
 ============
-[![Coverage Status](https://coveralls.io/repos/github/ln80/struct-sensitive/badge.svg?branch=main)](https://coveralls.io/github/ln80/struct-sensitive?branch=main)
 [![GoDoc](https://godoc.org/github.com/ln80/struct-sensitive?status.svg)](https://godoc.org/github.com/ln80/struct-sensitive)
 
 This Go library leverages struct tags to identify and manage sensitive fields in structs, ensuring data protection and compliance with privacy standards.
@@ -73,7 +72,7 @@ if err := sensitive.Mask(&profile); err != nil {
 - `SingleSubject`: every data field must use one subject. `Scan` returns `ErrMultipleSubjectID` when a second `subjectID` governs data anywhere in the type, or when the values of one declaration differ (two slice elements with different subjects). A struct that declares a `subjectID` but holds no data does not count.
 
 ```go
-s, err := sensitive.Scan(&event, true, sensitive.WithSubjectMode(sensitive.SingleSubject))
+s, err := sensitive.Scan(&event, sensitive.WithRequireSubject(), sensitive.WithSubjectMode(sensitive.SingleSubject))
 ```
 
 Use `SingleSubject` when each record must be erasable with one key, as crypto-shredding with one key per record does.
@@ -117,7 +116,23 @@ For more usage and examples see the [Godoc](http://godoc.org/github.com/ln80/str
 These shapes are intentional. Use full redaction when the leftover structure is still identifying. `mask.Register` adds a kind and refuses to replace one; `mask.Override` replaces it.
 
 ## Limitations
-1.  Only fields of types convertible to `string` or `*string` are supported, although nesting structs directly or through collections (slices and maps) is also supported. String slices (`[]string`, `[]*string`) are supported as data fields.
 
-2. Self-referencing types are supported. A value that contains a pointer cycle returns an error. A chain of more than 10000 structs returns an error.
+1. Data fields are strings and byte slices, through one pointer or a slice;
+   other types fail at scan time. Structs nest directly or through slices and
+   maps. The tag format and the accepted types are specified in
+   [docs/tag-format.md](docs/tag-format.md).
+2. Self-referencing types are supported. A value that contains a pointer
+   cycle returns an error. A chain of more than 10000 structs returns an
+   error.
+3. Masking is not anonymisation: a masked email keeps its domain. `Masked`
+   holds the original value in memory.
 
+## Documentation
+
+- [docs/tag-format.md](docs/tag-format.md): the tag format, normative.
+- [docs/api-stability.md](docs/api-stability.md): what the API promises.
+- [SECURITY.md](SECURITY.md): reporting a vulnerability.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).

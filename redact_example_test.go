@@ -50,17 +50,15 @@ func ExampleRedact_second() {
 		Role:     "Teacher",
 	}
 
-	err := sensitive.Redact(&p, func(rc *sensitive.RedactConfig) {
-		rc.RedactFunc = func(fr sensitive.FieldReplace, val string) (string, error) {
-			switch fr.Kind {
-			case "email":
-				return "ghost@unknown.net", nil
-			case "name":
-				return "Ghost", nil
-			}
-			return strings.Repeat("*", len(val)), nil
+	err := sensitive.Redact(&p, sensitive.WithRedactFunc(func(fr sensitive.FieldReplace, val string) (string, error) {
+		switch fr.Kind {
+		case "email":
+			return "ghost@unknown.net", nil
+		case "name":
+			return "Ghost", nil
 		}
-	})
+		return strings.Repeat("*", len(val)), nil
+	}))
 	if err != nil {
 		log.Fatal(err)
 	}

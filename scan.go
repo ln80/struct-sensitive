@@ -36,14 +36,14 @@ type Struct interface {
 
 	// SubjectID returns the subject Scan observed: the root struct's own
 	// subject, or the single nested subject when the root has none and every
-	// nested subject agrees. It is empty when nested subjects disagree, and
-	// panics when no subject can be resolved. Changing the struct after Scan
-	// does not change this result.
+	// nested subject agrees. It is empty when nested subjects disagree. ok is
+	// false when no subject was resolved. Changing the struct after Scan does
+	// not change this result.
 	//
 	// Under [SingleSubject] it is the one subject of every data field. Under
 	// [MultipleSubjects] a nested struct's data may use another subject: read
 	// [FieldReplace.SubjectID] or [Struct.Subjects] instead.
-	SubjectID() string
+	SubjectID() (id string, ok bool)
 
 	// Subjects lists the distinct subjects used by the struct's current data
 	// fields, sorted. It reads the struct as it is now. A data field with a
@@ -113,31 +113,38 @@ const (
 	SingleSubject
 )
 
-// ScanConfig holds the configuration for [Scan].
-type ScanConfig struct {
-	// SubjectMode is [MultipleSubjects] by default.
-	SubjectMode SubjectMode
+// scanConfig is set by ScanOption.
+type scanConfig struct {
+	subjectMode    SubjectMode
+	requireSubject bool
 }
 
-// WithSubjectMode sets the [SubjectMode] Scan enforces.
-func WithSubjectMode(m SubjectMode) func(*ScanConfig) {
-	return func(c *ScanConfig) {
-		c.SubjectMode = m
-	}
+// ScanOption configures [Scan]. [WithSubjectMode] and [WithRequireSubject]
+// build them.
+type ScanOption func(*scanConfig)
+
+// WithSubjectMode sets the [SubjectMode] Scan enforces ([MultipleSubjects]
+// by default).
+func WithSubjectMode(m SubjectMode) ScanOption {
+	return func(c *scanConfig) { c.subjectMode = m }
+}
+
+// WithRequireSubject makes Scan fail with [ErrSubjectIDNotFound] unless every
+// data field with a value resolves to a subject.
+func WithRequireSubject() ScanOption {
+	return func(c *scanConfig) { c.requireSubject = true }
 }
 
 // Scan inspects the given value and returns an accessor for the sensitive struct.
 // It returns an error if the value is not a pointer to a struct or if the 'sensitive' tag is misconfigured.
-// With requireSubject, every data field with a value must resolve to a subject.
-// Options set the [SubjectMode]; see [WithSubjectMode].
 //
 // The [Struct] accessor and the [Scan] function are low-level components.
 // In most cases, you should consider using the [Redact] or [Mask] functions instead.
-func Scan(v any, requireSubject bool, opts ...func(*ScanConfig)) (accessor Struct, err error) {
-	var cfg ScanConfig
+func Scan(v any, opts ...ScanOption) (accessor Struct, err error) {
+	var cfg scanConfig
 	option.Apply(&cfg, opts)
-	if cfg.SubjectMode != MultipleSubjects && cfg.SubjectMode != SingleSubject {
-		return nil, fmt.Errorf("%w: unknown subject mode %d", ErrInvalidTagConfiguration, cfg.SubjectMode)
+	if cfg.subjectMode != MultipleSubjects && cfg.subjectMode != SingleSubject {
+		return nil, fmt.Errorf("%w: unknown subject mode %d", ErrInvalidTagConfiguration, cfg.subjectMode)
 	}
 	defer func() {
 		catchPanic(&err)
@@ -197,12 +204,12 @@ func Scan(v any, requireSubject bool, opts ...func(*ScanConfig)) (accessor Struc
 		structValue.hasSubject = true
 	}
 
-	if requireSubject {
+	if cfg.requireSubject {
 		if err = ensureSubjects(ssType, structValue.val, "", false, newValueWalk()); err != nil {
 			return
 		}
 	}
-	if cfg.SubjectMode == SingleSubject {
+	if cfg.subjectMode == SingleSubject {
 		if err = ensureSingleSubject(ssType, structValue); err != nil {
 			return
 		}
@@ -414,7 +421,13 @@ func readSubject(pt sensitiveStructType, pv reflect.Value) (string, bool) {
 	if !v.IsValid() {
 		return "", false
 	}
-	return pt.subField.prefix + subjectIDValue(v), true
+	// An empty ID is no subject. Checked before the prefix: otherwise every
+	// record without an ID would share the subject "prefix".
+	id := subjectIDValue(v)
+	if id == "" {
+		return "", true
+	}
+	return pt.subField.prefix + id, true
 }
 
 func nestedTypeOf(f sensitiveField) (sensitiveStructType, bool) {
@@ -715,13 +728,10 @@ func derefStruct(v reflect.Value) (reflect.Value, bool) {
 	return v, true
 }
 
-func (ss sensitiveStruct) SubjectID() string {
+func (ss sensitiveStruct) SubjectID() (string, bool) {
 	// Scan stores the subject it observed. Later writes to the struct do not
 	// change this result, and a missing subject does not walk the value again.
-	if !ss.hasSubject {
-		panic(fmt.Errorf("%w in '%v'", ErrSubjectIDNotFound, ss.typ.rt))
-	}
-	return ss.subjectID
+	return ss.subjectID, ss.hasSubject
 }
 
 func (ss sensitiveStruct) Subjects() (subjects []string, err error) {

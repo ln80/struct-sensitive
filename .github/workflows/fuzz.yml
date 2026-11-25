@@ -1,0 +1,63 @@
+name: Fuzz
+on:
+  schedule:
+    # Twice a week: the Actions cache drops entries unused for 7 days, and
+    # each run starts from the corpus the previous one left.
+    - cron: "41 3 * * 0,3"
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: Time per target
+        default: 5m
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { package: ., target: FuzzParseTag }
+          - { package: ., target: FuzzMask }
+          - { package: ., target: FuzzScanSubjects }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: stable
+
+      # The corpus fuzzing builds lives in the Go cache, outside the
+      # repository. Keep each target's between runs.
+      - name: Locate the corpus
+        id: corpus
+        env:
+          PKG: ${{ matrix.package }}
+          TARGET: ${{ matrix.target }}
+        run: echo "dir=$(go env GOCACHE)/fuzz/$(go list "$PKG")/$TARGET" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.corpus.outputs.dir }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+
+      - name: Fuzz
+        env:
+          PKG: ${{ matrix.package }}
+          TARGET: ${{ matrix.target }}
+          FUZZTIME: ${{ inputs.fuzztime || '5m' }}
+        run: ./scripts/fuzz.sh "$PKG" "$TARGET" "$FUZZTIME"
+
+      - name: Keep the failing input
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.target }}-crasher
+          path: '**/testdata/fuzz/${{ matrix.target }}/'

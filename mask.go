@@ -12,12 +12,18 @@ import (
 	"github.com/mitchellh/copystructure"
 )
 
-// WithRegisteredMasks returns an option that force redaction using the registered masks,
-// including the predefined one e.g. `email`, `ipv4_addr`, `credit_card`.
+// WithRegisteredMasks masks each field with the mask registered for its kind,
+// including the predefined ones: `email`, `ipv4_addr`, `credit_card`,
+// `fullname`. A field without a kind or a registered mask, or whose mask
+// fails, gets [Redacted]; a failure is reported with the field path.
 //
 // Use [mask.Register] to add a mask. Use [mask.Override] to replace one.
-func WithRegisteredMasks(rc *RedactConfig) {
-	rc.RedactFunc = func(fr FieldReplace, val string) (string, error) {
+func WithRegisteredMasks() RedactOption {
+	return func(rc *redactConfig) { rc.redactFunc = registeredMasks(rc) }
+}
+
+func registeredMasks(rc *redactConfig) ReplaceFunc {
+	return func(fr FieldReplace, val string) (string, error) {
 		if fr.Kind == "" {
 			return RedactDefaultFunc(fr, val)
 		}
@@ -40,15 +46,14 @@ func WithRegisteredMasks(rc *RedactConfig) {
 //
 // Use [mask.Register] to add a mask. Use [mask.Override] to replace one,
 // including a predefined mask.
-func Mask(structPtr any, opts ...func(*RedactConfig)) (err error) {
+func Mask(structPtr any, opts ...RedactOption) (err error) {
 	defer catchPanic(&err)
-	err = Redact(structPtr, append([]func(*RedactConfig){WithRegisteredMasks}, opts...)...)
+	err = Redact(structPtr, append([]RedactOption{WithRegisteredMasks()}, opts...)...)
 	return err
 }
 
-var (
-	ErrFailedToMaskCopy = errors.New("failed to mask copy")
-)
+// ErrFailedToMaskCopy is returned by NewMaskedCopy, joined with the cause.
+var ErrFailedToMaskCopy = errors.New("failed to mask copy")
 
 // maskedOriginal holds the caller value behind an unexported type so a
 // reflection dump that does not follow unexported values prints an address.
@@ -63,27 +68,34 @@ type Masked[T any] struct {
 	value    T
 }
 
-type MaskedCopyConfig struct {
-	// DeepCopy controls whether the masked value is a deep copy of the caller value.
-	// Defaults to true. Setting it to false masks a shallow copy and is unsafe
-	// when the value contains pointer, slice, or map fields: those fields are
-	// shared with the caller, so Reveal and the caller can observe masked data.
-	DeepCopy bool
+// maskedCopyConfig is set by MaskedCopyOption.
+type maskedCopyConfig struct {
+	deepCopy bool
+}
+
+// MaskedCopyOption configures [NewMaskedCopy]. [WithoutDeepCopy] builds one.
+type MaskedCopyOption func(*maskedCopyConfig)
+
+// WithoutDeepCopy masks a shallow copy instead of a deep one. It is unsafe
+// when the value contains pointer, slice, or map fields: those fields are
+// shared with the caller, so Reveal and the caller can observe masked data.
+func WithoutDeepCopy() MaskedCopyOption {
+	return func(c *maskedCopyConfig) { c.deepCopy = false }
 }
 
 // NewMaskedCopy returns a new masked copy of the given value.
 // It fails if it can't copy the value or the mask config is invalid.
 //
 // Reveal returns v, including its unexported fields. The masked value is a
-// deep copy when DeepCopy is true, which is the default. T may be a struct
-// or a pointer to a struct.
-func NewMaskedCopy[T any](v T, opts ...func(*MaskedCopyConfig)) (*Masked[T], error) {
-	cfg := MaskedCopyConfig{
-		DeepCopy: true,
+// deep copy unless [WithoutDeepCopy] is set. T may be a struct or a pointer
+// to a struct.
+func NewMaskedCopy[T any](v T, opts ...MaskedCopyOption) (*Masked[T], error) {
+	cfg := maskedCopyConfig{
+		deepCopy: true,
 	}
 	option.Apply(&cfg, opts)
 
-	if !cfg.DeepCopy {
+	if !cfg.deepCopy {
 		masked := v
 		if err := maskValue(&masked); err != nil {
 			return nil, errors.Join(ErrFailedToMaskCopy, err)
@@ -114,9 +126,9 @@ func maskValue[T any](v *T) error {
 	return Mask(v)
 }
 
-// MaskedCopy returns a masked copy of the given value.
-// It panics in case of failure.
-func MaskedCopy[T any](v T, opts ...func(*MaskedCopyConfig)) *Masked[T] {
+// MustMaskedCopy is like [NewMaskedCopy] but panics if it fails. Use it for
+// values whose type is known to mask, such as package-level fixtures.
+func MustMaskedCopy[T any](v T, opts ...MaskedCopyOption) *Masked[T] {
 	copy, err := NewMaskedCopy(v, opts...)
 	if err != nil {
 		panic(err)

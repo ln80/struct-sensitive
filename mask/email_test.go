@@ -14,6 +14,10 @@ func TestEmail(t *testing.T) {
 			OK:    false,
 		},
 		{
+			Value: "@example.com",
+			OK:    false,
+		},
+		{
 			Value: "email.bar@example.com",
 			Want:  "*********@example.com",
 			OK:    true,

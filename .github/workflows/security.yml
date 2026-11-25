@@ -1,25 +1,40 @@
-name: Go Security Checker
+name: Security
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "17 6 * * 1" # weekly, to catch advisories published after a merge
+
+permissions:
+  contents: read
 
 jobs:
-  gosec:
-    name: Inspect for security problems
+  govulncheck:
+    name: Known vulnerabilities
     runs-on: ubuntu-latest
-
     steps:
-      - name: Setup Go
-        uses: actions/setup-go@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          go-version: 1.24
+          persist-credentials: false
 
-      - name: Check out code
-        uses: actions/checkout@v4
-      
-      - name: Run Gosec scanner
-        uses: securego/gosec@master
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          args: -exclude-dir=testutil -exclude-dir=stack ./...
+          go-version: stable
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
+
+  gosec:
+    name: Static security analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: gosec
+        uses: securego/gosec@5eb1d104ef85ff2c905c877eb600e8c1dee33a22 # v2.30.0
+        with:
+          args: ./...

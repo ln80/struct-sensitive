@@ -23,7 +23,8 @@ func Email(email string, opts ...func(*Config[EmailConfig])) (string, error) {
 	option.Apply(&cfg, opts)
 
 	parts := strings.Split(email, "@")
-	if len(parts) != 2 {
+	if len(parts) != 2 || parts[0] == "" {
+		// An empty local part would mask to the input itself.
 		return "", errors.New("invalid email format")
 	}
 
