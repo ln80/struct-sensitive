@@ -3,7 +3,9 @@ package sensitive
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -17,6 +19,7 @@ var (
 // TagOptions is a map of options configured in the `sensitive` tag.
 type TagOptions map[string]string
 
+// Get returns the value of option name, or "" when the tag does not set it.
 func (m TagOptions) Get(name string) string {
 	opt, ok := m[name]
 	if !ok {
@@ -37,11 +40,13 @@ type TagPayload struct {
 	Options TagOptions
 }
 
-// Marshal returns back the string representation of the parsed tag.
+// Marshal returns the tag as it would be written on a field, with its options
+// sorted by name.
 func (p TagPayload) Marshal() string {
 	return marshalTag(p)
 }
 
+// String implements fmt.Stringer. It returns Marshal().
 func (p TagPayload) String() string {
 	return p.Marshal()
 }
@@ -59,7 +64,9 @@ var errBadTag = errors.New("invalid sensitive tag")
 // data accepts kind and replace. subjectID accepts prefix. dive accepts no
 // options. replace is not used here: it is the value a caller writes when the
 // field can no longer be read, such as privacy-engine for a forgotten subject.
-// A field may carry only one of sensitive, pii, and sens.
+// A field may carry only one of sensitive, pii, and sens. An empty tag, an
+// unknown tag name, an unknown or repeated option, and an option without '='
+// are errors. The format is specified in docs/tag-format.md.
 func ParseTag(rt reflect.StructTag) (*TagPayload, error) {
 	tag, tagID, err := extractTag(rt)
 	if err != nil {
@@ -123,8 +130,8 @@ func FieldTag(v any, field string) (*TagPayload, error) {
 
 func marshalTag(payload TagPayload) string {
 	str := payload.ID + ":" + "\"" + payload.Name
-	for k, v := range payload.Options {
-		str += "," + k + "=" + v
+	for _, k := range slices.Sorted(maps.Keys(payload.Options)) {
+		str += "," + k + "=" + payload.Options[k]
 	}
 	str += "\""
 
@@ -133,12 +140,15 @@ func marshalTag(payload TagPayload) string {
 
 func extractTag(rt reflect.StructTag) (tag, tagID string, err error) {
 	for _, id := range tagIDs {
-		v := rt.Get(id)
-		if v == "" {
+		v, ok := rt.Lookup(id)
+		if !ok {
 			continue
 		}
-		if tag != "" {
+		if tagID != "" {
 			return "", "", fmt.Errorf("%w: multiple tag IDs", errBadTag)
+		}
+		if strings.TrimSpace(v) == "" {
+			return "", "", fmt.Errorf("%w: empty %s tag", errBadTag, id)
 		}
 		tag, tagID = v, id
 	}
@@ -159,6 +169,11 @@ func allowedOption(name, key string) bool {
 func parseTag(tagStr string) (name string, opts TagOptions, err error) {
 	parts := strings.Split(tagStr, ",")
 	name = strings.TrimSpace(parts[0])
+	switch name {
+	case tagData, tagDive, tagSubjectID:
+	default:
+		return "", nil, fmt.Errorf("%w: name %q", errBadTag, name)
+	}
 	opts = make(TagOptions)
 	for _, opt := range parts[1:] {
 		key, val, ok := strings.Cut(opt, "=")
@@ -169,6 +184,9 @@ func parseTag(tagStr string) (name string, opts TagOptions, err error) {
 		val = strings.TrimSpace(val)
 		if !allowedOption(name, key) {
 			return "", nil, fmt.Errorf("%w: option %q", errBadTag, key)
+		}
+		if _, dup := opts[key]; dup {
+			return "", nil, fmt.Errorf("%w: repeated option %q", errBadTag, key)
 		}
 		opts[key] = val
 	}

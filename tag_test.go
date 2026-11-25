@@ -130,6 +130,30 @@ func TestParseTagRejectsBadOptions(t *testing.T) {
 				Email string `sensitive:"data,kind"`
 			}{},
 		},
+		{
+			name: "unknown name",
+			val: struct {
+				Email string `pii:"datum"`
+			}{},
+		},
+		{
+			name: "repeated option",
+			val: struct {
+				Email string `pii:"data,kind=email,kind=fullname"`
+			}{},
+		},
+		{
+			name: "empty tag",
+			val: struct {
+				Email string `pii:""`
+			}{},
+		},
+		{
+			name: "trailing comma",
+			val: struct {
+				Email string `pii:"data,"`
+			}{},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -165,5 +189,14 @@ func TestParseTagAcceptsReplaceOnData(t *testing.T) {
 	}
 	if got := payload.Options.Get("replace"); got != "deleted pii" {
 		t.Fatalf("replace = %q", got)
+	}
+}
+
+func TestTagMarshalIsSorted(t *testing.T) {
+	p := TagPayload{ID: "pii", Name: "data", Options: TagOptions{"replace": "x", "kind": "email"}}
+	for range 20 {
+		if got := p.Marshal(); got != `pii:"data,kind=email,replace=x"` {
+			t.Fatalf("Marshal() = %s", got)
+		}
 	}
 }
