@@ -421,7 +421,13 @@ func readSubject(pt sensitiveStructType, pv reflect.Value) (string, bool) {
 	if !v.IsValid() {
 		return "", false
 	}
-	return pt.subField.prefix + subjectIDValue(v), true
+	// An empty ID is no subject. Checked before the prefix: otherwise every
+	// record without an ID would share the subject "prefix".
+	id := subjectIDValue(v)
+	if id == "" {
+		return "", true
+	}
+	return pt.subField.prefix + id, true
 }
 
 func nestedTypeOf(f sensitiveField) (sensitiveStructType, bool) {
