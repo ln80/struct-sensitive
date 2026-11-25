@@ -10,8 +10,10 @@ import (
 type FullNameConfig struct {
 }
 
-// FullName keeps the first letter of the first and last words and the length of every word.
-// Those leftovers can re-identify a person. Prefer full redaction when the name must not be recognizable.
+// FullName keeps the first letter of the first and last words, unless the
+// word has only one letter, and the length of every word. Those leftovers can
+// re-identify a person. Prefer full redaction when the name must not be
+// recognizable.
 func FullName(name string, opts ...func(*Config[FullNameConfig])) (string, error) {
 	cfg := DefaultConfig(FullNameConfig{})
 	option.Apply(&cfg, opts)
@@ -22,7 +24,7 @@ func FullName(name string, opts ...func(*Config[FullNameConfig])) (string, error
 	for i, word := range words {
 		// Use rune count for correct multi-byte character handling
 		runeCount := utf8.RuneCountInString(word)
-		if i == 0 || i == len(words)-1 {
+		if (i == 0 || i == len(words)-1) && runeCount > 1 {
 			builder.WriteRune([]rune(word)[0])
 			builder.WriteString(strings.Repeat(string(cfg.Symbol), runeCount-1))
 		} else {

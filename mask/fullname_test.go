@@ -21,7 +21,14 @@ func TestFullName(t *testing.T) {
 		},
 		{
 			Value: "X Æ A-12 Musk",
-			Want:  "X * **** M***",
+			Want:  "* * **** M***",
+			OK:    true,
+		},
+		{
+			// A one-letter word is masked whole: keeping its first letter
+			// would keep all of it.
+			Value: "A",
+			Want:  "*",
 			OK:    true,
 		},
 	})
