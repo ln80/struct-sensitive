@@ -36,14 +36,14 @@ type Struct interface {
 
 	// SubjectID returns the subject Scan observed: the root struct's own
 	// subject, or the single nested subject when the root has none and every
-	// nested subject agrees. It is empty when nested subjects disagree, and
-	// panics when no subject can be resolved. Changing the struct after Scan
-	// does not change this result.
+	// nested subject agrees. It is empty when nested subjects disagree. ok is
+	// false when no subject was resolved. Changing the struct after Scan does
+	// not change this result.
 	//
 	// Under [SingleSubject] it is the one subject of every data field. Under
 	// [MultipleSubjects] a nested struct's data may use another subject: read
 	// [FieldReplace.SubjectID] or [Struct.Subjects] instead.
-	SubjectID() string
+	SubjectID() (id string, ok bool)
 
 	// Subjects lists the distinct subjects used by the struct's current data
 	// fields, sorted. It reads the struct as it is now. A data field with a
@@ -722,13 +722,10 @@ func derefStruct(v reflect.Value) (reflect.Value, bool) {
 	return v, true
 }
 
-func (ss sensitiveStruct) SubjectID() string {
+func (ss sensitiveStruct) SubjectID() (string, bool) {
 	// Scan stores the subject it observed. Later writes to the struct do not
 	// change this result, and a missing subject does not walk the value again.
-	if !ss.hasSubject {
-		panic(fmt.Errorf("%w in '%v'", ErrSubjectIDNotFound, ss.typ.rt))
-	}
-	return ss.subjectID
+	return ss.subjectID, ss.hasSubject
 }
 
 func (ss sensitiveStruct) Subjects() (subjects []string, err error) {

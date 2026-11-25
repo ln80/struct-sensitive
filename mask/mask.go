@@ -32,33 +32,34 @@ func DefaultConfig[T any](t T) Config[T] {
 // Masker is the function type that masks must satisfy.
 type Masker[T any] func(val string, opts ...func(*Config[T])) (string, error)
 
-// defaultMasker is a masker that doesn't support options
-type defaultMasker func(val string) (string, error)
+// Func masks one value. It is what the registry holds: [Register],
+// [Override] and [Of] take and return it.
+type Func func(val string) (string, error)
 
-// DefaultMasker takes a masker and return the default masker associated with.
-func DefaultMasker[T any](m Masker[T]) defaultMasker {
+// DefaultMasker returns m with its default config, as a [Func].
+func DefaultMasker[T any](m Masker[T]) Func {
 	return func(val string) (string, error) { return m(val) }
 }
 
 var (
-	maskRegistry map[string]defaultMasker = make(map[string]defaultMasker)
+	maskRegistry map[string]Func = make(map[string]Func)
 	maskMu       sync.RWMutex
 )
 
 // Register adds a default masker for kind.
 // It rejects a nil function, an empty kind, and a kind that is already registered.
 // Use Override to replace a mask, including a predefined one.
-func Register(kind string, m defaultMasker) error {
+func Register(kind string, m Func) error {
 	return register(kind, m, false)
 }
 
 // Override sets the mask for kind, replacing one that is already registered.
 // It rejects a nil function and an empty kind.
-func Override(kind string, m defaultMasker) error {
+func Override(kind string, m Func) error {
 	return register(kind, m, true)
 }
 
-func register(kind string, m defaultMasker, override bool) error {
+func register(kind string, m Func, override bool) error {
 	if m == nil {
 		return ErrNilMask
 	}
@@ -74,14 +75,14 @@ func register(kind string, m defaultMasker, override bool) error {
 	return nil
 }
 
-func mustRegister(kind string, m defaultMasker) {
+func mustRegister(kind string, m Func) {
 	if err := Register(kind, m); err != nil {
 		panic(err)
 	}
 }
 
-// Of returns the specific default masker of the given kind.
-func Of(kind string) (m defaultMasker, found bool) {
+// Of returns the mask registered for kind.
+func Of(kind string) (m Func, found bool) {
 	// Read-only access: use RLock to allow concurrent mask lookups
 	maskMu.RLock()
 	defer maskMu.RUnlock()

@@ -507,7 +507,7 @@ func TestScan(t *testing.T) {
 			if !reflect.DeepEqual(tc.want, tc.val) {
 				t.Fatalf("expect %s, %s be equals", tc.want, tc.val)
 			}
-			if !reflect.DeepEqual("abc", s.SubjectID()) {
+			if !reflect.DeepEqual("abc", subjectOf(s)) {
 				t.Fatalf("expect %s, %s be equals", tc.want, tc.val)
 			}
 		})
@@ -602,7 +602,7 @@ func TestSubjectIDResolution(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Scan() err = %v", err)
 			}
-			if got := s.SubjectID(); got != tc.want {
+			if got := subjectOf(s); got != tc.want {
 				t.Fatalf("SubjectID() = %q, want %q", got, tc.want)
 			}
 
@@ -659,7 +659,7 @@ func TestParentDataUsesEmbeddedSubject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.SubjectID(); got != "u1" {
+	if got := subjectOf(s); got != "u1" {
 		t.Fatalf("SubjectID() = %q", got)
 	}
 	var got string
@@ -689,7 +689,7 @@ func TestEmbeddedSubjectStaysWithNestedData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.SubjectID(); got != "secret" {
+	if got := subjectOf(s); got != "secret" {
 		t.Fatalf("SubjectID() = %q", got)
 	}
 	got := map[string]string{}
@@ -825,7 +825,7 @@ func TestPerElementSubject(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
-		if got := s.SubjectID(); got != "" {
+		if got := subjectOf(s); got != "" {
 			t.Fatalf("SubjectID() = %q, want empty", got)
 		}
 		got := map[string]string{}
@@ -890,7 +890,7 @@ func TestPerElementSubject(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Scan() err = %v", err)
 		}
-		if got := s.SubjectID(); got != "u1" {
+		if got := subjectOf(s); got != "u1" {
 			t.Fatalf("SubjectID() = %q, want u1", got)
 		}
 		got := map[string]string{}
@@ -1232,7 +1232,7 @@ func TestSubjectIDDoesNotReresolve(t *testing.T) {
 		t.Fatalf("Scan() err = %v", err)
 	}
 	in.ID = "u2"
-	if got := s.SubjectID(); got != "u1" {
+	if got := subjectOf(s); got != "u1" {
 		t.Fatalf("SubjectID() = %q after mutation", got)
 	}
 
@@ -1246,11 +1246,13 @@ func TestSubjectIDDoesNotReresolve(t *testing.T) {
 		t.Fatalf("Scan() err = %v", err)
 	}
 	n.Next = n
-	defer func() {
-		recovered := recover()
-		if recovered == nil {
-			t.Fatal("SubjectID() did not panic")
-		}
-	}()
-	_ = s.SubjectID()
+	if id, ok := s.SubjectID(); ok || id != "" {
+		t.Fatalf("SubjectID() = %q, %v, want no subject", id, ok)
+	}
+}
+
+// subjectOf returns the subject Scan resolved, or "" when it resolved none.
+func subjectOf(s Struct) string {
+	id, _ := s.SubjectID()
+	return id
 }

@@ -128,8 +128,8 @@ func TestSingleSubjectIgnoresSubjectWithoutData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SubjectID() != "secret" {
-		t.Fatalf("SubjectID() = %q", s.SubjectID())
+	if subjectOf(s) != "secret" {
+		t.Fatalf("SubjectID() = %q", subjectOf(s))
 	}
 	if got := subjectsOf(t, s); got["Payload"] != "secret" {
 		t.Fatalf("subjects = %v", got)
@@ -142,8 +142,8 @@ func TestSingleSubjectNestedOwnerAndInheritedDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SubjectID() != "viewer" {
-		t.Fatalf("SubjectID() = %q", s.SubjectID())
+	if subjectOf(s) != "viewer" {
+		t.Fatalf("SubjectID() = %q", subjectOf(s))
 	}
 	got := subjectsOf(t, s)
 	if got["Viewer.Email"] != "viewer" || got["Details.IP"] != "viewer" {
@@ -156,8 +156,8 @@ func TestSingleSubjectPromotedEmbedIsOneDeclaration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SubjectID() != "u1" {
-		t.Fatalf("SubjectID() = %q", s.SubjectID())
+	if subjectOf(s) != "u1" {
+		t.Fatalf("SubjectID() = %q", subjectOf(s))
 	}
 }
 
@@ -167,8 +167,8 @@ func TestSingleSubjectSliceElementsMustAgree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SubjectID() != "u1" {
-		t.Fatalf("SubjectID() = %q", s.SubjectID())
+	if subjectOf(s) != "u1" {
+		t.Fatalf("SubjectID() = %q", subjectOf(s))
 	}
 
 	differ := &modeGroup{Members: []modeMember{{ID: "u1", Email: "a@x"}, {ID: "u2", Email: "b@x"}}}
