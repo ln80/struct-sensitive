@@ -1,10 +1,12 @@
 name: Go Module
-
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -12,28 +14,24 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ["1.24", "1.25", "1.26" ]
-
+        go-version: ["1.25", "1.26"]
     steps:
-      - name: Setup Go
-        uses: actions/setup-go@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Check out code
-        uses: actions/checkout@v4
-    
-      - name: Install Dependencies
-        run: go mod download
-        env:
-          GOPROXY: https://proxy.golang.org,direct
-  
-      - name: Run Unit Tests
-        run: |
-          make test
+      - name: Verify dependencies
+        run: go mod verify
 
-      - name: Upload Test Coverage
-        if: ${{ (github.event_name == 'push') }}
+      - name: Run unit tests
+        run: make test
+
+      - name: Coverage of at least 90%
         run: |
-          go install github.com/mattn/goveralls@latest
-          goveralls -coverprofile=coverage.out -repotoken=${{ secrets.COVERALLS_TOKEN }}
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub("%", "", $3); print $3}')
+          echo "coverage: ${total}%"
+          awk -v t="$total" 'BEGIN { exit (t >= 90) ? 0 : 1 }'
