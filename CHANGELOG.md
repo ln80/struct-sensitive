@@ -3,7 +3,7 @@
 All notable changes. The API follows [semantic versioning](https://semver.org);
 see [docs/api-stability.md](docs/api-stability.md).
 
-## Unreleased
+## v0.9.1
 
 ### Changed
 
