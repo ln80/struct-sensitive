@@ -3,6 +3,12 @@
 All notable changes. The API follows [semantic versioning](https://semver.org);
 see [docs/api-stability.md](docs/api-stability.md).
 
+## Unreleased
+
+### Changed
+
+- Go 1.26 or later; CI tests on Go 1.26 and 1.27. Go 1.25 is out of support.
+
 ## v0.9.0
 
 The API freeze before v1. Breaking.
